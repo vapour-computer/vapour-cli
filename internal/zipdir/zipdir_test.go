@@ -26,13 +26,14 @@ func TestCheckAndZip(t *testing.T) {
 	}
 	write(t, d, "index.html", "<html></html>")
 	write(t, d, "sub/game.wasm", "\x00asm")
+	write(t, d, "sub/game.js", "console.log(1)")
 	write(t, d, ".git/config", "x")
 	if err := Check(d); err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
 	n, err := Zip(d, &buf)
-	if err != nil || n != 2 {
+	if err != nil || n != 3 {
 		t.Fatalf("zip: %d %v", n, err)
 	}
 	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
@@ -40,11 +41,19 @@ func TestCheckAndZip(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := map[string]bool{}
+	methods := map[string]uint16{}
 	for _, f := range zr.File {
 		names[f.Name] = true
+		methods[f.Name] = f.Method
 	}
-	if !names["index.html"] || !names["sub/game.wasm"] || names[".git/config"] {
+	if !names["index.html"] || !names["sub/game.wasm"] || !names["sub/game.js"] || names[".git/config"] {
 		t.Errorf("entries: %v", names)
+	}
+	if methods["sub/game.wasm"] != zip.Store {
+		t.Fatalf("wasm method = %d, want store", methods["sub/game.wasm"])
+	}
+	if methods["sub/game.js"] != zip.Deflate {
+		t.Fatalf("js method = %d, want deflate", methods["sub/game.js"])
 	}
 	write(t, d, "game.exe", "MZ")
 	if Check(d) == nil {

@@ -17,6 +17,12 @@ var nativeExt = map[string]bool{".exe": true, ".dll": true, ".so": true, ".dylib
 
 var skipNames = map[string]bool{".git": true, ".DS_Store": true, "Thumbs.db": true}
 
+var storeCompressedExt = map[string]bool{
+	".br": true, ".gz": true, ".zip": true, ".png": true, ".jpg": true, ".jpeg": true,
+	".webp": true, ".mp3": true, ".ogg": true, ".mp4": true, ".webm": true,
+	".woff": true, ".woff2": true, ".wasm": true, ".pck": true, ".data": true,
+}
+
 // Check verifies dir looks like a web export: it has an index.html and no native binaries.
 func Check(dir string) error {
 	st, err := os.Stat(dir)
@@ -85,7 +91,11 @@ func Zip(dir string, w io.Writer) (int, error) {
 			return err
 		}
 		h.Name = filepath.ToSlash(rel)
-		h.Method = zip.Deflate
+		if storeCompressedExt[strings.ToLower(filepath.Ext(rel))] {
+			h.Method = zip.Store
+		} else {
+			h.Method = zip.Deflate
+		}
 		fw, err := zw.CreateHeader(h)
 		if err != nil {
 			return err

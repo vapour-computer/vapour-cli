@@ -6,6 +6,7 @@ package devserver
 
 import (
 	_ "embed"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +28,7 @@ const (
 	fpsPath    = "/__vapour/fps.js"
 	reportPath = "/__vapour/report"
 	scriptTag  = `<script src="` + fpsPath + `"></script>`
+	playPrefix = "/play/local/"
 )
 
 // Report is the frame summary the overlay sends when the page is closed.
@@ -44,6 +47,10 @@ type Options struct {
 	Telemetry bool
 	// OnReport is called with the summary when a page with the overlay is closed. May be nil.
 	OnReport func(Report)
+	// Player serves a local player shell with an iframe using production-like sandbox/allow attributes.
+	Player bool
+	// Mobile enables phone-like shell sizing/hints for --player previews.
+	Mobile bool
 }
 
 func init() {
@@ -54,7 +61,6 @@ func init() {
 // Handler returns the HTTP handler. Wasm games need cross-origin isolation for threads
 // (SharedArrayBuffer), so the isolation headers are always sent.
 func Handler(o Options) http.Handler {
-	files := http.FileServer(http.FS(o.FS))
 	mux := http.NewServeMux()
 
 	if o.Telemetry {
@@ -80,21 +86,49 @@ func Handler(o Options) http.Handler {
 	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if o.Player {
+			servePlayer(w, r, o)
+			return
+		}
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			serveIndex(w, o)
 			return
 		}
-		files.ServeHTTP(w, r)
+		serveBuildFile(w, r, o.FS, strings.TrimPrefix(path.Clean(r.URL.Path), "/"))
 	})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Cross-Origin-Embedder-Policy", "require-corp")
-		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		h.Set("Cross-Origin-Resource-Policy", "cross-origin")
+		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Cache-Control", "no-store")
 		mux.ServeHTTP(w, r)
 	})
+}
+
+func servePlayer(w http.ResponseWriter, r *http.Request, o Options) {
+	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+		mobileClass := ""
+		mobileScript := ""
+		if o.Mobile {
+			mobileClass = " mobile"
+			mobileScript = `<script>window.__vapourMobilePreview=true;</script>`
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body class="`+mobileClass+`"><style>html,body{margin:0;height:100%;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}.wrap{height:100%;display:flex;flex-direction:column}.gate{padding:10px}.stage{flex:1;display:flex}.mobile .stage{max-width:430px;max-height:932px;margin:auto}iframe{border:0;width:100%;height:100%}</style><div class="wrap"><div class="gate"><button id="play">Play</button></div><div class="stage"><iframe id="vapour-frame" src="`+playPrefix+`index.html" sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-orientation-lock allow-presentation" allow="fullscreen; gamepad; autoplay; cross-origin-isolated; keyboard-lock; clipboard-read; clipboard-write; xr-spatial-tracking; screen-wake-lock; accelerometer; gyroscope; web-share"></iframe></div></div><script>document.getElementById('play').addEventListener('click',()=>{const f=document.getElementById('vapour-frame');f.focus();f.contentWindow&&f.contentWindow.focus();});</script>`+mobileScript+`</body></html>`)
+		return
+	}
+	if !strings.HasPrefix(r.URL.Path, "/play/local") {
+		http.NotFound(w, r)
+		return
+	}
+	rel := strings.TrimPrefix(r.URL.Path, "/play/local/")
+	if rel == "" || rel == "/" {
+		rel = "index.html"
+	}
+	serveBuildFile(w, r, o.FS, rel)
 }
 
 func serveIndex(w http.ResponseWriter, o Options) {
@@ -108,6 +142,113 @@ func serveIndex(w http.ResponseWriter, o Options) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(b)
+}
+
+func serveBuildFile(w http.ResponseWriter, r *http.Request, root fs.FS, rel string) {
+	rel = strings.TrimPrefix(path.Clean("/"+rel), "/")
+	b, err := fs.ReadFile(root, rel)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	ctype, cenc := contentHeadersForPath(rel)
+	w.Header().Set("Content-Type", ctype)
+	if cenc != "" {
+		w.Header().Set("Content-Encoding", cenc)
+	}
+	http.ServeContent(w, r, rel, time.Time{}, bytes.NewReader(b))
+}
+
+func contentHeadersForPath(rel string) (contentType, contentEncoding string) {
+	lower := strings.ToLower(rel)
+	if strings.HasSuffix(lower, ".br") {
+		return contentTypeForPath(strings.TrimSuffix(lower, ".br")), "br"
+	}
+	if strings.HasSuffix(lower, ".gz") {
+		return contentTypeForPath(strings.TrimSuffix(lower, ".gz")), "gzip"
+	}
+	if strings.HasSuffix(lower, ".unityweb") {
+		if strings.HasSuffix(lower, ".wasm.unityweb") {
+			return "application/wasm", ""
+		}
+		if strings.HasSuffix(lower, ".js.unityweb") {
+			return "text/javascript; charset=utf-8", ""
+		}
+		if strings.HasSuffix(lower, ".json.unityweb") {
+			return "application/json", ""
+		}
+		return "application/octet-stream", ""
+	}
+	return contentTypeForPath(lower), ""
+}
+
+func contentTypeForPath(path string) string {
+	if strings.HasSuffix(path, ".symbols.json") {
+		return "application/json"
+	}
+	switch ext := strings.ToLower(strings.TrimPrefix(pathpkgExt(path), ".")); ext {
+	case "html", "htm":
+		return "text/html; charset=utf-8"
+	case "js", "mjs":
+		return "text/javascript; charset=utf-8"
+	case "wasm":
+		return "application/wasm"
+	case "json":
+		return "application/json"
+	case "css":
+		return "text/css; charset=utf-8"
+	case "png":
+		return "image/png"
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "webp":
+		return "image/webp"
+	case "svg":
+		return "image/svg+xml"
+	case "ico":
+		return "image/x-icon"
+	case "mp3":
+		return "audio/mpeg"
+	case "ogg":
+		return "audio/ogg"
+	case "wav":
+		return "audio/wav"
+	case "webm":
+		return "video/webm"
+	case "mp4":
+		return "video/mp4"
+	case "woff":
+		return "font/woff"
+	case "woff2":
+		return "font/woff2"
+	case "ttf":
+		return "font/ttf"
+	case "otf":
+		return "font/otf"
+	case "xml":
+		return "application/xml"
+	case "webmanifest":
+		return "application/manifest+json"
+	case "gif":
+		return "image/gif"
+	case "flac":
+		return "audio/flac"
+	case "m4a":
+		return "audio/mp4"
+	case "glb":
+		return "model/gltf-binary"
+	case "gltf":
+		return "model/gltf+json"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func pathpkgExt(p string) string {
+	if i := strings.LastIndexByte(p, '.'); i >= 0 {
+		return p[i:]
+	}
+	return ""
 }
 
 // inject adds the overlay script before </head>, else before </body>, else at the end.
