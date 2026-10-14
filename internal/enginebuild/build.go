@@ -295,7 +295,11 @@ func bevy(ctx context.Context, root, dest string, out io.Writer) error {
 		if e := replaceAssets(assets, filepath.Join(dest, "assets")); e != nil {
 			return e
 		}
-	} else if !os.IsNotExist(e) {
+	} else if os.IsNotExist(e) {
+		if e := os.RemoveAll(filepath.Join(dest, "assets")); e != nil {
+			return e
+		}
+	} else {
 		return e
 	}
 	return os.WriteFile(filepath.Join(dest, "index.html"), []byte(`<!doctype html><meta charset="utf-8"><title>Vapour game</title><script type="module">import init from './game.js'; init().catch(console.error);</script>`), 0644)
