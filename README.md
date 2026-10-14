@@ -72,4 +72,6 @@ Credentials live in `~/.config/vapour/credentials` (mode 0600). Set `--api` or `
 go test ./...
 ```
 
+Documentation: https://vapour-dev-docs.pages.dev/
+
 MIT licensed.

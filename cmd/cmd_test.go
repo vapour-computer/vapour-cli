@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/png"
 	"io"
@@ -242,5 +243,16 @@ func TestRejectsBadMediaBeforeUploading(t *testing.T) {
 	}
 	if len(api.versions) != 0 || api.storeMeta != nil {
 		t.Error("bad media reached the server")
+	}
+}
+
+func TestErrorsPointToTheDocs(t *testing.T) {
+	msg := ErrorMessage(errors.New("could not reach the server"))
+	if !strings.HasPrefix(msg, "error: could not reach the server") || !strings.Contains(msg, "https://vapour-dev-docs.pages.dev/") {
+		t.Errorf("error message: %q", msg)
+	}
+	out, _ := run(t, "--help")
+	if !strings.Contains(out, "https://vapour-dev-docs.pages.dev/") {
+		t.Errorf("help does not mention the docs:\n%s", out)
 	}
 }
