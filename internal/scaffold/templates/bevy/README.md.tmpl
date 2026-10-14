@@ -1,8 +1,17 @@
 # {{.Title}}
 
-A game for [Vapour](https://vapour.ink).
+A Bevy game starter for [Vapour](https://vapour.ink).
 
-## Publish
+## Project layout
 
-1. Build with `trunk build --release --public-url ./` (or `wasm-bindgen`) and copy the output so `index.html` sits in `build/web/`.
-2. `vapour publish`
+- `src/` — your game code
+- `assets/` — game assets
+- `build/web/` — exported web build for `vapour publish`
+
+## Export for web
+
+Use your preferred Bevy web workflow (`trunk`, `wasm-bindgen`, or custom pipeline), then copy output files so `build/web/index.html` exists.
+
+## Publish to Vapour
+
+1. `vapour publish`

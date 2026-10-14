@@ -23,6 +23,7 @@ go install github.com/vapour-computer/vapour-cli@latest
 ```sh
 vapour login --token vpr_...          # create a token on your Vapour dashboard
 vapour create "My Game" --engine godot
+vapour template godot "My Other Game" # clone org template, remove .git, initialize Vapour files
 cd my-game
 # export your game for Web into build/web/ (needs an index.html)
 vapour publish
@@ -50,6 +51,10 @@ Use `--no-profile` to skip it.
 
 `vapour create --from <git-url>` clones a sample game instead of scaffolding. `vapour publish --dry-run` checks and
 zips your build without uploading. In CI, set `VAPOUR_TOKEN` instead of running `login`.
+
+`vapour template <engine> <name>` clones official template repos (`bevy`, `godot`, `unity`) from GitHub
+(default org: `vapour-computer`), removes `.git`, then writes `vapour.toml` and `store/` files.
+Override the org with `--org your-org`.
 
 ### Store page: text, images, banner, trailer
 
