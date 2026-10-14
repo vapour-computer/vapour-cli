@@ -18,6 +18,17 @@ var Engines = []string{"godot", "unity", "bevy", "other"}
 type Manifest struct {
 	Project Project `toml:"project"`
 	Build   Build   `toml:"build"`
+	Store   Store   `toml:"store"`
+}
+
+// Store points at the store-page files. Both are optional; paths are relative to the game folder.
+type Store struct {
+	// Page is the JSON template: game details, media files and the section layout.
+	Page string `toml:"page,omitempty"`
+	// Content is the Markdown text (the "template.md" that `vapour create` writes).
+	Content string `toml:"content,omitempty"`
+	// Notes is optional Markdown release notes for the version being published.
+	Notes string `toml:"notes,omitempty"`
 }
 
 type Project struct {

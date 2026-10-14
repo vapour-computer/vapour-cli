@@ -1,6 +1,6 @@
 module github.com/vapour-computer/vapour-cli
 
-go 1.24
+go 1.26.0
 
 require (
 	github.com/pelletier/go-toml/v2 v2.4.3
@@ -10,4 +10,5 @@ require (
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
+	golang.org/x/image v0.46.0 // indirect
 )

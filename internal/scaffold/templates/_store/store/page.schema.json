@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Vapour store page",
+  "description": "Game details, media files and the section layout of a Vapour store page. Text lives in template.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "sections"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tagline": { "type": "string", "maxLength": 140 },
+        "category": { "enum": ["", "action", "adventure", "arcade", "casual", "horror", "platformer", "puzzle", "racing", "retro", "rpg", "shooter", "simulation", "sports", "strategy", "other"] },
+        "tags": { "type": "array", "maxItems": 5, "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9 -]{0,23}$" } }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Paths relative to this file. PNG, JPEG or WebP images; MP4 or WebM video (30 MiB max). Leave empty to skip.",
+      "properties": {
+        "banner": { "type": "string", "description": "Wide header image, at least 960x300 (2:1 or wider), 4 MiB max." },
+        "cover": { "type": "string", "description": "Card image, at least 460x215, 2 MiB max." },
+        "screenshots": { "type": "array", "maxItems": 8, "items": { "type": "string" }, "description": "At least 640x360 each, 4 MiB max each." },
+        "video": { "type": "string" }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": { "enum": ["media", "markdown", "release_notes", "details", "links"] },
+          "anchor": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$", "description": "markdown only: the \"## \" heading in template.md, lowercased with hyphens. \"intro\" is the text before the first heading." },
+          "title": { "type": "string", "maxLength": 60 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 20, "description": "release_notes only." }
+        },
+        "if": { "properties": { "type": { "const": "markdown" } } },
+        "then": { "required": ["anchor"] }
+      }
+    },
+    "details": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "value"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "value": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "url"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "url": { "type": "string", "pattern": "^https://", "maxLength": 300 }
+        }
+      }
+    }
+  }
+}

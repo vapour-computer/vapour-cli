@@ -1,0 +1,31 @@
+{
+  "$schema": "./page.schema.json",
+  "version": 1,
+  "game": {
+    "tagline": "A short line that sells your game.",
+    "category": "casual",
+    "tags": []
+  },
+  "media": {
+    "banner": "",
+    "cover": "",
+    "screenshots": [],
+    "video": ""
+  },
+  "sections": [
+    { "type": "media" },
+    { "type": "markdown", "anchor": "intro" },
+    { "type": "markdown", "anchor": "about", "title": "About this game" },
+    { "type": "markdown", "anchor": "features", "title": "Features" },
+    { "type": "markdown", "anchor": "how-to-play", "title": "How to play" },
+    { "type": "markdown", "anchor": "credits", "title": "Credits" },
+    { "type": "release_notes", "limit": 5 },
+    { "type": "details" },
+    { "type": "links" }
+  ],
+  "details": [
+    { "label": "Controls", "value": "Keyboard and mouse" },
+    { "label": "Players", "value": "Single player" }
+  ],
+  "links": []
+}

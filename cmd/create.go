@@ -51,19 +51,24 @@ func newCreate() *cobra.Command {
 				m.Project.ID, m.Project.Slug = g.ID, g.Slug
 			}
 
+			data := scaffold.Data{Title: title, Slug: m.Project.Slug, Engine: engine}
 			if from != "" {
 				if err := clone(from, dir); err != nil {
 					return err
 				}
-			} else if err := scaffold.Write(dir, engine, scaffold.Data{Title: title, Slug: m.Project.Slug, Engine: engine}); err != nil {
+				if err := scaffold.WriteStore(dir, data); err != nil {
+					return err
+				}
+			} else if err := scaffold.Write(dir, engine, data); err != nil {
 				return err
 			}
+			m.Store = project.Store{Page: "store/page.json", Content: "store/template.md"}
 			if err := m.Save(dir); err != nil {
 				return err
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Created %s in ./%s\n", title, dir)
-			fmt.Fprintf(out, "Next: export your game for Web into %s/%s, then run `vapour publish` from ./%s\n", dir, m.Build.Dir, dir)
+			fmt.Fprintf(out, "Next: write your store text in %s/store/template.md and edit %s/store/page.json,\nexport your game for Web into %s/%s, then run `vapour publish` from ./%s\n", dir, dir, dir, m.Build.Dir, dir)
 			return nil
 		},
 	}

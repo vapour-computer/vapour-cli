@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -67,6 +68,8 @@ type Game struct {
 	BuildURL string `json:"build_url"`
 	CoverURL string `json:"cover_url"`
 	Status   string `json:"status"`
+	Category string `json:"category"`
+	Tagline  string `json:"tagline"`
 }
 
 type MeResponse struct {
@@ -148,8 +151,14 @@ type File struct {
 	Body io.Reader
 }
 
-// Publish uploads a build (zip) and an optional cover image, streaming the request body.
-func (c *Client) Publish(ctx context.Context, projectID, version string, build File, cover *File) (*PublishResponse, error) {
+// Part is a named upload read lazily from disk, so large files are streamed rather than loaded.
+type Part struct {
+	Field string
+	Path  string
+}
+
+// Publish uploads a build (zip) for a new version, with optional Markdown release notes, streaming the request body.
+func (c *Client) Publish(ctx context.Context, projectID, version, notes string, build File) (*PublishResponse, error) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
@@ -157,13 +166,13 @@ func (c *Client) Publish(ctx context.Context, projectID, version string, build F
 			if err := mw.WriteField("version", version); err != nil {
 				return err
 			}
-			if err := part(mw, "build", build, "application/zip"); err != nil {
-				return err
-			}
-			if cover != nil {
-				if err := part(mw, "cover", *cover, coverType(cover.Name)); err != nil {
+			if notes != "" {
+				if err := mw.WriteField("notes", notes); err != nil {
 					return err
 				}
+			}
+			if err := part(mw, "build", build, "application/zip"); err != nil {
+				return err
 			}
 			return mw.Close()
 		}()
@@ -178,6 +187,61 @@ func (c *Client) Publish(ctx context.Context, projectID, version string, build F
 	return &r, nil
 }
 
+// PutStore updates a game's store page: metadata JSON (tagline, description, category, tags, page) and media files.
+// Files are streamed from disk. It does not change the build, version or status.
+func (c *Client) PutStore(ctx context.Context, projectID string, metadata map[string]any, parts []Part) (*Game, error) {
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	go func() {
+		err := func() error {
+			if len(metadata) > 0 {
+				b, err := json.Marshal(metadata)
+				if err != nil {
+					return err
+				}
+				if err := mw.WriteField("metadata", string(b)); err != nil {
+					return err
+				}
+			}
+			for _, p := range parts {
+				f, err := os.Open(p.Path)
+				if err != nil {
+					return err
+				}
+				err = part(mw, p.Field, File{Name: p.Path, Body: f}, partType(p.Path))
+				f.Close()
+				if err != nil {
+					return err
+				}
+			}
+			return mw.Close()
+		}()
+		pw.CloseWithError(err)
+	}()
+	var g Game
+	err := c.do(ctx, http.MethodPut, "/projects/"+projectID+"/store", pr, mw.FormDataContentType(), &g)
+	pr.CloseWithError(err)
+	if err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+func partType(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".mp4":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	default:
+		return "image/png"
+	}
+}
+
 func part(mw *multipart.Writer, field string, f File, ctype string) error {
 	h := make(textproto.MIMEHeader)
 	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, field, filepath.Base(f.Name)))
@@ -188,15 +252,4 @@ func part(mw *multipart.Writer, field string, f File, ctype string) error {
 	}
 	_, err = io.Copy(w, f.Body)
 	return err
-}
-
-func coverType(name string) string {
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".webp":
-		return "image/webp"
-	default:
-		return "image/png"
-	}
 }

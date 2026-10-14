@@ -1,0 +1,23 @@
+# Store page for {{.Title}}
+
+| File | What it is |
+|---|---|
+| `template.md` | The text of your store page (Markdown). Each `## ` heading is a section. |
+| `page.json` | The JSON template: game details (tagline, category, tags), media files, and which sections show, in what order. |
+| `page.schema.json` | Lets your editor check and autocomplete `page.json`. |
+
+Put images and the trailer in this folder and name them in `page.json` under `media`.
+
+| Media | Format | Limits |
+|---|---|---|
+| banner | PNG, JPEG, WebP | at least 960x300, 2:1 or wider, 4 MiB |
+| cover | PNG, JPEG, WebP | at least 460x215, 2 MiB |
+| screenshots (up to 8) | PNG, JPEG, WebP | at least 640x360, 4 MiB each |
+| video | MP4 or WebM | 30 MiB |
+
+Check everything without uploading: `vapour store check`.
+Update only the store page: `vapour store push`.
+Publish a new version with the page and your build: `vapour publish` (bump `version` in `vapour.toml` first; each version can be published once).
+Add release notes with `--notes "..."` or `--notes-file notes.md`.
+
+Players see only published games.
