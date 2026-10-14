@@ -28,6 +28,26 @@ cd my-game
 vapour publish
 ```
 
+### Test locally
+
+```sh
+vapour test                  # serve build.dir on 127.0.0.1 and open it, with an FPS overlay
+vapour test --no-telemetry   # same, without the overlay
+vapour test --port 8080 --no-open
+```
+
+`vapour test` serves your web export with the cross-origin isolation headers Wasm threads need. The FPS overlay
+(FPS, frame time, 1% low, worst frame; toggle with Ctrl+Shift+F) exists only here: it is injected while serving, never
+written into your build folder, so `vapour publish` cannot include it. It listens on loopback only and sends nothing over
+the network; closing the game tab prints a frame summary in the terminal.
+
+On Linux, `vapour test` also opens the game in its own Chromium-family browser (private temporary profile) and attaches
+[vapour-profiler](https://github.com/vapour-computer/vapour-profiler) to that browser and all its processes. The profiler
+dashboard opens as a second tab and CPU and memory capture starts automatically. Closing the browser, or Ctrl+C,
+stops everything and deletes the temporary profile. Point the CLI at the profiler with `--profiler PATH` or
+`VAPOUR_PROFILER`, or place it next to the `vapour` binary; if it or a Chromium-family browser is missing, `vapour test` says so and carries on with the FPS overlay.
+Use `--no-profile` to skip it.
+
 `vapour create --from <git-url>` clones a sample game instead of scaffolding. `vapour publish --dry-run` checks and
 zips your build without uploading. In CI, set `VAPOUR_TOKEN` instead of running `login`.
 
