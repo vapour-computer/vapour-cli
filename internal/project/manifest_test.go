@@ -17,7 +17,14 @@ func TestSlugify(t *testing.T) {
 
 func TestManifestRoundTripAndValidate(t *testing.T) {
 	dir := t.TempDir()
-	m := &Manifest{Project: Project{ID: "g1", Title: "T", Slug: "t", Engine: "godot", Version: "0.1.0"}, Build: Build{Dir: "build/web", Command: "custom", Args: []string{"exporter", "--web"}, Boot: []string{"*.html"}, SplitWarnMiB: 1024}}
+	renderScale := 0.75
+	maxDPR := 2.0
+	m := &Manifest{
+		Project: Project{ID: "g1", Title: "T", Slug: "t", Engine: "godot", Version: "0.1.0"},
+		Build:   Build{Dir: "build/web", Command: "custom", Args: []string{"exporter", "--web"}, Boot: []string{"*.html"}, SplitWarnMiB: 1024},
+		Runtime: Runtime{Threads: true, WebGPU: false, COEP: "require-corp", Entry: "index.html"},
+		Mobile:  Mobile{Orientation: "landscape", RenderScale: &renderScale, MaxDPR: &maxDPR},
+	}
 	if err := m.Save(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +43,33 @@ func TestManifestRoundTripAndValidate(t *testing.T) {
 	if got.Validate() == nil {
 		t.Error("bad version accepted")
 	}
+	got.Project.Version = "0.1.0"
+	got.Runtime.COEP = "bad"
+	if got.Validate() == nil {
+		t.Error("bad coep accepted")
+	}
+	got.Runtime.COEP = "require-corp"
+	got.Mobile.Orientation = "upside-down"
+	if got.Validate() == nil {
+		t.Error("bad orientation accepted")
+	}
+	got.Mobile.Orientation = "portrait"
+	rs := 2.0
+	got.Mobile.RenderScale = &rs
+	if got.Validate() == nil {
+		t.Error("bad render_scale accepted")
+	}
 	if _, err := Load(t.TempDir()); err == nil {
 		t.Error("missing manifest accepted")
+	}
+}
+
+func TestMobileDefaults(t *testing.T) {
+	m := &Manifest{}
+	if got := m.MobileOrientation(); got != "any" {
+		t.Fatalf("orientation=%q", got)
+	}
+	if got := m.MobileRenderScale(); got != 1 {
+		t.Fatalf("render scale=%v", got)
 	}
 }
