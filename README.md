@@ -4,7 +4,15 @@ Command-line tool for [Vapour](https://vapour.ink): log in, create a game projec
 
 ## Install
 
-Download a binary from the [releases](https://github.com/vapour-computer/vapour-cli/releases) page, or build it:
+macOS and Linux (amd64, arm64):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/vapour-computer/vapour-cli/main/install.sh | sh
+```
+
+This downloads the latest release from GitHub, verifies its checksum, and installs `vapour` to `/usr/local/bin` (or `~/.local/bin` if that isn't writable). Pin a version with `VAPOUR_VERSION=v0.2.0`, or choose the directory with `VAPOUR_INSTALL_DIR`.
+
+Or download a binary (including Windows) from the [releases](https://github.com/vapour-computer/vapour-cli/releases) page, or build it:
 
 ```sh
 go install github.com/vapour-computer/vapour-cli@latest
