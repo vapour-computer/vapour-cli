@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/vapour-computer/vapour-cli/internal/project"
 	"github.com/vapour-computer/vapour-cli/internal/storepage"
 	"github.com/vapour-computer/vapour-cli/internal/zipdir"
+	"github.com/vapour-computer/vapour-cli/pkg/delivery"
 )
 
 const maxBuild = 512 << 20 // matches the API limit
@@ -20,6 +22,7 @@ const maxBuild = 512 << 20 // matches the API limit
 func newPublish() *cobra.Command {
 	var dir, version, notes, notesFile string
 	var dryRun, skipStore bool
+	var chunked bool
 	cmd := &cobra.Command{
 		Use:   "publish",
 		Short: "Publish a new version: store page, images, trailer and your web build",
@@ -53,6 +56,73 @@ your web export as a new version. Each version can be published once; bump "vers
 
 			// Resolve the build: a folder is checked and zipped; a .zip is uploaded as is.
 			buildPath := filepath.Join(dir, m.Build.Dir)
+			if chunked {
+				if releaseNotes != "" {
+					return fmt.Errorf("experimental chunk publish does not yet support release notes")
+				}
+				cache, err := os.MkdirTemp("", "vapour-chunks-*")
+				if err != nil {
+					return err
+				}
+				defer os.RemoveAll(cache)
+				manifest, err := delivery.Pack(buildPath, cache, m.Project.Version, []string{"*.html", "*.js", "*.wasm", "*.pck", "Build/*.js", "Build/*.wasm", "Build/*.data", "Build/*.unityweb", "Build/*.gz", "Build/*.br"})
+				if err != nil {
+					return err
+				}
+				if raw, e := os.ReadFile(filepath.Join(dir, ".vapour", "build.json")); e == nil {
+					var meta struct {
+						Schema int             `json:"schema"`
+						Files  []delivery.File `json:"files"`
+					}
+					if e := json.Unmarshal(raw, &meta); e != nil {
+						return fmt.Errorf("build metadata: %w", e)
+					}
+					if meta.Schema != 1 {
+						return fmt.Errorf("unsupported build metadata schema")
+					}
+					flags := map[string]delivery.File{}
+					for _, f := range meta.Files {
+						flags[f.Path] = f
+					}
+					for i, f := range manifest.Files {
+						if entry, ok := flags[f.Path]; ok {
+							if entry.Size != f.Size {
+								return fmt.Errorf("stale build metadata for %s; rerun vapour build", f.Path)
+							}
+							manifest.Files[i].Boot = entry.Boot
+						}
+					}
+				} else if !os.IsNotExist(e) {
+					return e
+				}
+				for _, f := range manifest.Files {
+					if f.Size > 1<<30 {
+						fmt.Fprintf(out, "Warning: %s exceeds 1 GiB; split engine packs before browser loading: %s\n", f.Path, DocsURL)
+					}
+				}
+				if dryRun {
+					fmt.Fprintf(out, "Chunked dry run: %d files, nothing uploaded.\n", len(manifest.Files))
+					return nil
+				}
+				c, err := client(true)
+				if err != nil {
+					return err
+				}
+				if err := ensureProject(cmd.Context(), c, m, dir); err != nil {
+					return err
+				}
+				if bundle != nil {
+					if err := pushStore(cmd.Context(), out, c, m, bundle); err != nil {
+						return err
+					}
+				}
+				n, err := delivery.Upload(cmd.Context(), c.Base, m.Project.ID, c.Token, cache, manifest)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(out, "Finalized chunk manifest %s; uploaded %d bytes\n", manifest.Version, n)
+				return nil
+			}
 			zipPath, cleanup, err := prepareZip(buildPath)
 			if err != nil {
 				return err
@@ -110,6 +180,7 @@ your web export as a new version. Each version can be published once; bump "vers
 	cmd.Flags().StringVar(&notesFile, "notes-file", "", "read the release notes (Markdown) from a file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "check and zip everything, but do not upload")
 	cmd.Flags().BoolVar(&skipStore, "skip-store", false, "publish the build only; leave the store page as it is")
+	cmd.Flags().BoolVar(&chunked, "experimental-chunks", false, "use experimental v1 chunk protocol (requires a compatible server)")
 	return cmd
 }
 
