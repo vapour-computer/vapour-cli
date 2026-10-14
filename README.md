@@ -66,6 +66,12 @@ notes = ""                     # optional: Markdown release notes for this versi
 
 Credentials live in `~/.config/vapour/credentials` (mode 0600). Set `--api` or `VAPOUR_API` to point at another server.
 
+## Build from source
+
+`vapour build` exports Godot 4, Unity WebGL or Bevy using locally installed tools.
+See [engine build configuration and prerequisites](internal/enginebuild/README.md).
+Add `.vapour/` to your project's ignore file; it contains generated boot metadata.
+
 ## Develop
 
 ```sh

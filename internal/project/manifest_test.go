@@ -1,6 +1,9 @@
 package project
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestSlugify(t *testing.T) {
 	for in, want := range map[string]string{
@@ -14,12 +17,12 @@ func TestSlugify(t *testing.T) {
 
 func TestManifestRoundTripAndValidate(t *testing.T) {
 	dir := t.TempDir()
-	m := &Manifest{Project: Project{ID: "g1", Title: "T", Slug: "t", Engine: "godot", Version: "0.1.0"}, Build: Build{Dir: "build/web"}}
+	m := &Manifest{Project: Project{ID: "g1", Title: "T", Slug: "t", Engine: "godot", Version: "0.1.0"}, Build: Build{Dir: "build/web", Command: "custom", Args: []string{"exporter", "--web"}, Boot: []string{"*.html"}, SplitWarnMiB: 1024}}
 	if err := m.Save(dir); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Load(dir)
-	if err != nil || *got != *m {
+	if err != nil || !reflect.DeepEqual(got, m) {
 		t.Fatalf("round trip: %v %+v", err, got)
 	}
 	if err := got.Validate(); err != nil {

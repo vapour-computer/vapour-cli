@@ -40,6 +40,10 @@ type Project struct {
 }
 
 type Build struct {
+	Command      string   `toml:"command,omitempty"`
+	Args         []string `toml:"args,omitempty"`
+	Boot         []string `toml:"boot,omitempty"`
+	SplitWarnMiB int64    `toml:"split_warn_mib,omitempty"`
 	// Dir is the web export folder (or a .zip file) to publish.
 	Dir   string `toml:"dir"`
 	Cover string `toml:"cover,omitempty"`
