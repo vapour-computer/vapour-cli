@@ -1,8 +1,16 @@
 # {{.Title}}
 
-A game for [Vapour](https://vapour.ink).
+A Unity game starter for [Vapour](https://vapour.ink).
 
-## Publish
+## Project layout
+
+- `Assets/`, `Packages/`, `ProjectSettings/` — Unity project files
+- `build/web/` — WebGL export for `vapour publish`
+
+## Export for web
 
 1. In Unity: **File → Build Profiles → Web**, build into `build/web/`. Choose a gzip/brotli-free build (Decompression Fallback on) or keep the default; Vapour serves what you upload.
-2. `vapour publish`
+
+## Publish to Vapour
+
+1. `vapour publish`

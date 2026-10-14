@@ -2,10 +2,18 @@
 
 A Godot game for [Vapour](https://vapour.ink).
 
-## Publish
+## Project layout
+
+- `project.godot` and scene/script files — your game source
+- `build/web/` — exported web build for `vapour publish`
+
+## Export for web
 
 1. In Godot: **Project → Export → Add… → Web**, then **Export Project** into `build/web/`
    (keep the file name `index.html`).
-2. `vapour publish`
+
+## Publish to Vapour
+
+1. `vapour publish`
 
 Tip: threaded exports need cross-origin isolation on the game host; the Vapour player provides it.
