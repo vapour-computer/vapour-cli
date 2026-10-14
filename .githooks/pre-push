@@ -1,0 +1,13 @@
+#!/bin/sh
+# Guardrail: no direct pushes to main. Open a PR from a feature branch instead.
+# One-off override: ALLOW_MAIN_PUSH=1 git push ...
+[ "$ALLOW_MAIN_PUSH" = 1 ] && exit 0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      echo "pre-push: direct push to ${remote_ref#refs/heads/} is blocked. Push a feature branch and open a PR." >&2
+      echo "          (override once with ALLOW_MAIN_PUSH=1)" >&2
+      exit 1 ;;
+  esac
+done
+exit 0
