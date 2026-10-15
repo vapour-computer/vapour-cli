@@ -29,6 +29,10 @@ cd my-game
 vapour publish
 ```
 
+### Update
+
+`vapour-cli update` installs the latest release over the running binary (checksum verified). `--check` only reports, `--version v0.2.0` picks a release. Not available on Windows.
+
 ### Test locally
 
 ```sh
@@ -97,6 +101,36 @@ page = "store/page.json"       # JSON template: details, media files, layout
 content = "store/template.md"  # Markdown text of the store page
 notes = ""                     # optional: Markdown release notes for this version
 ```
+
+### Phones: orientation and touch controls
+
+```toml
+[mobile]
+orientation = "landscape"   # any | landscape | portrait
+# HTML shown over the game while a phone is held the wrong way (max 4000 characters).
+# It is rendered in a sandbox with scripts off, so styling works but JavaScript does not.
+rotate_message = "<h2>Rotate your phone</h2><p>This game plays in landscape.</p>"
+# rotate_message_file = "store/rotate.html"   # or read it from a file in the game folder
+
+[controller]
+mode = "keyboard-map"       # keyboard-map | dedicated (alias: action-map)
+
+[[controller.controls]]
+id = "move"
+type = "joystick"           # button | dpad | joystick
+x = 0.23                    # centre of the control, 0..1 of the screen
+y = 0.77
+w = 0.30
+h = 0.30
+up = "w"
+down = "s"
+left = "a"
+right = "d"
+```
+
+`vapour controller init|check|preview` writes, validates and draws the layout. `preview` prints a landscape
+screen in the terminal with each control labelled; `preview --html` writes a page you can open. The layout
+is uploaded with `vapour publish`.
 
 ### Mouse look (`build.pointer_lock`)
 

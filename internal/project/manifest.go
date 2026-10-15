@@ -21,6 +21,8 @@ type Manifest struct {
 	Runtime Runtime `toml:"runtime"`
 	Mobile  Mobile  `toml:"mobile"`
 	Store   Store   `toml:"store"`
+
+	Controller Controller `toml:"controller"`
 }
 
 type Runtime struct {
@@ -35,6 +37,10 @@ type Mobile struct {
 	Orientation string   `toml:"orientation,omitempty"`
 	RenderScale *float64 `toml:"render_scale,omitempty"`
 	MaxDPR      *float64 `toml:"max_dpr,omitempty"`
+	// RotateMessage is HTML shown over the game when the phone is held in the wrong orientation.
+	// RotateMessageFile is a path (relative to the game folder) to read it from instead.
+	RotateMessage     string `toml:"rotate_message,omitempty"`
+	RotateMessageFile string `toml:"rotate_message_file,omitempty"`
 }
 
 // Store points at the store-page files. Both are optional; paths are relative to the game folder.
@@ -48,11 +54,13 @@ type Store struct {
 }
 
 type Project struct {
-	ID      string `toml:"id,omitempty"`
-	Title   string `toml:"title"`
-	Slug    string `toml:"slug"`
-	Engine  string `toml:"engine"`
-	Version string `toml:"version"`
+	ID     string `toml:"id,omitempty"`
+	Title  string `toml:"title"`
+	Slug   string `toml:"slug"`
+	Engine string `toml:"engine"`
+	// Platform is optional: desktop | native-mobile | port.
+	Platform string `toml:"platform,omitempty"`
+	Version  string `toml:"version"`
 }
 
 type Build struct {
@@ -117,6 +125,12 @@ func (m *Manifest) Validate() error {
 	if strings.TrimSpace(m.Build.Dir) == "" {
 		return fmt.Errorf("%s: build.dir is required (your web export folder or .zip)", File)
 	}
+	if err := validatePlatform(m.Project.Platform); err != nil {
+		return fmt.Errorf("%s: %w", File, err)
+	}
+	if err := m.Controller.Validate(); err != nil {
+		return fmt.Errorf("%s: %w", File, err)
+	}
 	switch m.Build.PointerLock {
 	case "", "auto", "off":
 	default:
@@ -174,4 +188,44 @@ func Slugify(s string) string {
 		return "game"
 	}
 	return s
+}
+
+// MaxRotateMessage caps the rotate-your-phone HTML (characters).
+const MaxRotateMessage = 4000
+
+// RotateMessageHTML returns the HTML for the rotate overlay, from mobile.rotate_message or the file
+// named by mobile.rotate_message_file (inside the game folder). Empty means "use the default text".
+func (m *Manifest) RotateMessageHTML(dir string) (string, error) {
+	s := m.Mobile.RotateMessage
+	if f := strings.TrimSpace(m.Mobile.RotateMessageFile); f != "" {
+		if s != "" {
+			return "", fmt.Errorf("%s: set only one of mobile.rotate_message and mobile.rotate_message_file", File)
+		}
+		root, err := filepath.Abs(dir)
+		if err != nil {
+			return "", err
+		}
+		root, err = filepath.EvalSymlinks(root)
+		if err != nil {
+			return "", err
+		}
+		p := filepath.Join(root, f)
+		resolved, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			return "", fmt.Errorf("%s: mobile.rotate_message_file: %w", File, err)
+		}
+		if rel, err := filepath.Rel(root, resolved); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("%s: mobile.rotate_message_file must be inside the game folder", File)
+		}
+		b, err := os.ReadFile(resolved)
+		if err != nil {
+			return "", fmt.Errorf("%s: mobile.rotate_message_file: %w", File, err)
+		}
+		s = string(b)
+	}
+	s = strings.TrimSpace(s)
+	if n := len([]rune(s)); n > MaxRotateMessage {
+		return "", fmt.Errorf("%s: rotate message has %d characters; the limit is %d", File, n, MaxRotateMessage)
+	}
+	return s, nil
 }

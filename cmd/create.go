@@ -14,28 +14,32 @@ import (
 )
 
 func newCreate() *cobra.Command {
-	var engine, from string
+	var engine, from, platform string
 	var offline bool
 	cmd := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create a game project (scaffold, or clone a sample with --from)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return createProject(cmd, strings.TrimSpace(args[0]), engine, from, offline)
+			return createProject(cmd, strings.TrimSpace(args[0]), engine, platform, from, offline)
 		},
 	}
 	cmd.Flags().StringVar(&engine, "engine", "godot", "godot | unity | bevy | other")
+	cmd.Flags().StringVar(&platform, "platform", "desktop", "desktop | native-mobile | port")
 	cmd.Flags().StringVar(&from, "from", "", "git URL of a sample game to clone into the new folder")
 	cmd.Flags().BoolVar(&offline, "offline", false, "scaffold only; the project is registered on first publish")
 	return cmd
 }
 
-func createProject(cmd *cobra.Command, title, engine, from string, offline bool) error {
+func createProject(cmd *cobra.Command, title, engine, platform, from string, offline bool) error {
 	if title == "" {
 		return fmt.Errorf("name is required")
 	}
 	if !validEngine(engine) {
 		return fmt.Errorf("--engine must be one of %s", strings.Join(project.Engines, ", "))
+	}
+	if !validPlatform(platform) {
+		return fmt.Errorf("--platform must be one of %s", strings.Join(project.Platforms, ", "))
 	}
 	slug := project.Slugify(title)
 	dir := slug
@@ -45,7 +49,7 @@ func createProject(cmd *cobra.Command, title, engine, from string, offline bool)
 
 	// Register the project first, so nothing is left on disk if the server refuses it.
 	m := &project.Manifest{
-		Project: project.Project{Title: title, Slug: slug, Engine: engine, Version: "0.1.0"},
+		Project: project.Project{Title: title, Slug: slug, Engine: engine, Platform: platform, Version: "0.1.0"},
 		Build:   project.Build{Dir: "build/web"},
 	}
 	if !offline {
@@ -79,6 +83,15 @@ func createProject(cmd *cobra.Command, title, engine, from string, offline bool)
 	fmt.Fprintf(out, "Created %s in ./%s\n", title, dir)
 	fmt.Fprintf(out, "Next: write your store text in %s/store/template.md and edit %s/store/page.json,\nexport your game for Web into %s/%s, then run `vapour publish` from ./%s\n", dir, dir, dir, m.Build.Dir, dir)
 	return nil
+}
+
+func validPlatform(p string) bool {
+	for _, v := range project.Platforms {
+		if p == v {
+			return true
+		}
+	}
+	return false
 }
 
 func validEngine(e string) bool {
