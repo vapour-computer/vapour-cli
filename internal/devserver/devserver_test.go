@@ -10,8 +10,10 @@ import (
 
 func site() fstest.MapFS {
 	return fstest.MapFS{
-		"index.html": {Data: []byte("<html><head><title>g</title></head><body></body></html>")},
-		"game.wasm":  {Data: []byte("\x00asm")},
+		"index.html":              {Data: []byte("<html><head><title>g</title></head><body></body></html>")},
+		"game.wasm":               {Data: []byte("\x00asm")},
+		"Build/GAME.WASM.BR":      {Data: []byte("wasm")},
+		"Build/game.symbols.json": {Data: []byte("{}")},
 	}
 }
 
@@ -45,8 +47,55 @@ func TestIsolationHeadersAndWasmType(t *testing.T) {
 	if w.Header().Get("Cross-Origin-Opener-Policy") != "same-origin" || w.Header().Get("Cross-Origin-Embedder-Policy") != "require-corp" {
 		t.Fatalf("missing isolation headers: %v", w.Header())
 	}
+	if w.Header().Get("Cross-Origin-Resource-Policy") != "cross-origin" {
+		t.Fatalf("CORP mismatch: %q", w.Header().Get("Cross-Origin-Resource-Policy"))
+	}
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("nosniff missing")
+	}
 	if ct := w.Header().Get("Content-Type"); ct != "application/wasm" {
 		t.Fatalf("wasm content type = %q", ct)
+	}
+}
+
+func TestPrecompressedHeadersUseInnerType(t *testing.T) {
+	w := get(t, Handler(Options{FS: site()}), "GET", "/Build/GAME.WASM.BR", nil, "")
+	if ct := w.Header().Get("Content-Type"); ct != "application/wasm" {
+		t.Fatalf("content type = %q", ct)
+	}
+	if enc := w.Header().Get("Content-Encoding"); enc != "br" {
+		t.Fatalf("encoding = %q", enc)
+	}
+}
+
+func TestPlayerModeServesIframeShell(t *testing.T) {
+	w := get(t, Handler(Options{FS: site(), Player: true, Mobile: true}), "GET", "/", nil, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("shell status: %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "sandbox=\"allow-scripts allow-same-origin") || !strings.Contains(body, "src=\"/play/local/index.html?__vapour_mobile=1\"") {
+		t.Fatalf("shell missing iframe attrs: %s", body)
+	}
+
+	asset := get(t, Handler(Options{FS: site(), Player: true}), "GET", "/play/local/game.wasm", nil, "")
+	if asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "application/wasm" {
+		t.Fatalf("player asset serve failed: code=%d ct=%q", asset.Code, asset.Header().Get("Content-Type"))
+	}
+}
+
+func TestMobilePreviewInjectsConfiguredRuntimeHints(t *testing.T) {
+	maxDpr := 1.5
+	w := get(t, Handler(Options{FS: site(), Player: true, Mobile: true, MobileOrientation: "landscape", MobileRenderScale: 0.5, MobileMaxDPR: &maxDpr}), "GET", "/play/local/index.html?__vapour_mobile=1", nil, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("mobile page status: %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"orientation":"landscape"`) || !strings.Contains(body, `"render_scale":0.5`) || !strings.Contains(body, `"max_dpr":1.5`) {
+		t.Fatalf("missing configured runtime settings: %s", body)
+	}
+	if !strings.Contains(body, "dpr=dpr*s.render_scale") {
+		t.Fatalf("expected downscale multiplication not found: %s", body)
 	}
 }
 

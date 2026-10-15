@@ -17,6 +17,12 @@ var nativeExt = map[string]bool{".exe": true, ".dll": true, ".so": true, ".dylib
 
 var skipNames = map[string]bool{".git": true, ".DS_Store": true, "Thumbs.db": true}
 
+var storeCompressedExt = map[string]bool{
+	".br": true, ".gz": true, ".zip": true, ".png": true, ".jpg": true, ".jpeg": true,
+	".webp": true, ".mp3": true, ".ogg": true, ".mp4": true, ".webm": true,
+	".woff": true, ".woff2": true,
+}
+
 // Check verifies dir looks like a web export: it has an index.html and no native binaries.
 func Check(dir string) error {
 	st, err := os.Stat(dir)
@@ -80,24 +86,40 @@ func Zip(dir string, w io.Writer) (int, error) {
 		if err != nil {
 			return err
 		}
-		h, err := zip.FileInfoHeader(info)
-		if err != nil {
-			return err
-		}
-		h.Name = filepath.ToSlash(rel)
-		h.Method = zip.Deflate
-		fw, err := zw.CreateHeader(h)
-		if err != nil {
-			return err
-		}
 		f, err := os.Open(p)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-		if _, err := io.Copy(fw, f); err != nil {
+		store, err := shouldStore(rel, f)
+		if err != nil {
+			_ = f.Close()
 			return err
 		}
+		h, err := zip.FileInfoHeader(info)
+		if err != nil {
+			_ = f.Close()
+			return err
+		}
+		h.Name = filepath.ToSlash(rel)
+		if store {
+			h.Method = zip.Store
+		} else {
+			h.Method = zip.Deflate
+		}
+		fw, err := zw.CreateHeader(h)
+		if err != nil {
+			_ = f.Close()
+			return err
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			_ = f.Close()
+			return err
+		}
+		if _, err := io.Copy(fw, f); err != nil {
+			_ = f.Close()
+			return err
+		}
+		_ = f.Close()
 		n++
 		return nil
 	})
@@ -108,6 +130,32 @@ func Zip(dir string, w io.Writer) (int, error) {
 		return 0, errors.New("build folder is empty")
 	}
 	return n, zw.Close()
+}
+
+func shouldStore(rel string, f *os.File) (bool, error) {
+	lower := strings.ToLower(rel)
+	if storeCompressedExt[strings.ToLower(filepath.Ext(rel))] {
+		return true, nil
+	}
+	if !strings.HasSuffix(lower, ".unityweb") {
+		return false, nil
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return false, err
+	}
+	buf := make([]byte, 512)
+	n, err := f.Read(buf)
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+	buf = buf[:n]
+	if len(buf) >= 2 && buf[0] == 0x1f && buf[1] == 0x8b {
+		return true, nil
+	}
+	if strings.Contains(string(buf), "UnityWeb Compressed Content (brotli)") {
+		return true, nil
+	}
+	return false, nil
 }
 
 // IsZip reports whether path starts with the zip magic bytes.
