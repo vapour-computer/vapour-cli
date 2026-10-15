@@ -29,6 +29,10 @@ cd my-game
 vapour publish
 ```
 
+### Update
+
+`vapour-cli update` installs the latest release over the running binary (checksum verified). `--check` only reports, `--version v0.2.0` picks a release. Not available on Windows.
+
 ### Test locally
 
 ```sh
