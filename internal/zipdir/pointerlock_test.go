@@ -30,6 +30,12 @@ func TestInjectPointerLock(t *testing.T) {
 	if !strings.HasPrefix(got, "<html><HEAD lang=x><script") {
 		t.Errorf("script should be first in <head>: %q", got)
 	}
+	if !strings.Contains(got, "target=this") {
+		t.Errorf("script should remember request target: %q", got)
+	}
+	if strings.Contains(got, "querySelector('canvas')") {
+		t.Errorf("script should re-request lock on saved target, not first canvas: %q", got)
+	}
 }
 
 func TestZipWithPointerLock(t *testing.T) {
@@ -70,5 +76,12 @@ func TestZipWithPointerLock(t *testing.T) {
 	off := read(Options{})
 	if strings.Contains(off["index.html"], PointerLockMarker) {
 		t.Error("injected although disabled")
+	}
+	entry := read(Options{PointerLock: true, PointerLockEntry: "sub/index.html"})
+	if strings.Contains(entry["index.html"], PointerLockMarker) {
+		t.Error("root index.html should not be injected when runtime.entry is set")
+	}
+	if !strings.Contains(entry["sub/index.html"], PointerLockMarker) {
+		t.Error("runtime.entry HTML should be injected")
 	}
 }

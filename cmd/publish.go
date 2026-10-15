@@ -123,7 +123,7 @@ your web export as a new version. Each version can be published once; bump "vers
 				fmt.Fprintf(out, "Finalized chunk manifest %s; uploaded %d bytes\n", manifest.Version, n)
 				return nil
 			}
-			zipPath, cleanup, err := prepareZip(buildPath, m.Build.PointerLockEnabled())
+			zipPath, cleanup, err := prepareZip(buildPath, m.Build.PointerLockEnabled(), m.Runtime.Entry)
 			if err != nil {
 				return err
 			}
@@ -162,7 +162,7 @@ your web export as a new version. Each version can be published once; bump "vers
 			}
 			defer f.Close()
 			fmt.Fprintf(out, "Uploading version %s to %s ...\n", m.Project.Version, c.Base)
-			res, err := c.Publish(cmd.Context(), m.Project.ID, m.Project.Version, releaseNotes, api.File{Name: "build.zip", Body: f})
+			res, err := c.Publish(cmd.Context(), m.Project.ID, m.Project.Version, releaseNotes, publishMetadata(m), api.File{Name: "build.zip", Body: f})
 			if err != nil {
 				var ae *api.Error
 				if errors.As(err, &ae) && ae.Code == "version_exists" {
@@ -203,8 +203,42 @@ func resolveNotes(inline, file string, b *storepage.Bundle) (string, error) {
 	return s, nil
 }
 
+func publishMetadata(m *project.Manifest) map[string]any {
+	runtime := map[string]any{}
+	if m.Runtime.Threads {
+		runtime["threads"] = true
+	}
+	if m.Runtime.WebGPU {
+		runtime["webgpu"] = true
+	}
+	if m.Runtime.COEP != "" {
+		runtime["coep"] = m.Runtime.COEP
+	}
+	if m.Runtime.Entry != "" {
+		runtime["entry"] = m.Runtime.Entry
+	}
+	mobile := map[string]any{}
+	if orientation := m.MobileOrientation(); orientation != "any" {
+		mobile["orientation"] = orientation
+	}
+	if scale := m.MobileRenderScale(); scale != 1 {
+		mobile["render_scale"] = scale
+	}
+	if m.Mobile.MaxDPR != nil {
+		mobile["max_dpr"] = *m.Mobile.MaxDPR
+	}
+	out := map[string]any{}
+	if len(runtime) > 0 {
+		out["runtime"] = runtime
+	}
+	if len(mobile) > 0 {
+		out["mobile"] = mobile
+	}
+	return out
+}
+
 // prepareZip returns a path to a zip of buildPath and a cleanup function.
-func prepareZip(buildPath string, pointerLock bool) (string, func(), error) {
+func prepareZip(buildPath string, pointerLock bool, entry string) (string, func(), error) {
 	noop := func() {}
 	st, err := os.Stat(buildPath)
 	if err != nil {
@@ -224,7 +258,7 @@ func prepareZip(buildPath string, pointerLock bool) (string, func(), error) {
 		return "", noop, err
 	}
 	cleanup := func() { os.Remove(tmp.Name()) }
-	if _, err := zipdir.ZipWith(buildPath, io.Writer(tmp), zipdir.Options{PointerLock: pointerLock}); err != nil {
+	if _, err := zipdir.ZipWith(buildPath, io.Writer(tmp), zipdir.Options{PointerLock: pointerLock, PointerLockEntry: entry}); err != nil {
 		tmp.Close()
 		cleanup()
 		return "", noop, err

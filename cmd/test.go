@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 	"github.com/vapour-computer/vapour-cli/internal/devserver"
 	"github.com/vapour-computer/vapour-cli/internal/localprofile"
@@ -22,7 +23,7 @@ import (
 func newTest() *cobra.Command {
 	var dir string
 	var port int
-	var noTelemetry, noOpen, noProfile bool
+	var noTelemetry, noOpen, noProfile, playerMode, mobilePreview bool
 	var profilerBin string
 	cmd := &cobra.Command{
 		Use:   "test",
@@ -31,9 +32,14 @@ func newTest() *cobra.Command {
 
 The FPS overlay (FPS, frame time, 1% low, worst frame) is added only while testing locally. It is injected
 while serving, so your build folder is never changed and "vapour publish" never includes it. Nothing is sent
-over the network; with the Linux profiler installed it also attaches vapour-profiler to the browser. A summary is printed here when you close the game tab. Toggle the overlay with Ctrl+Shift+F.`,
+over the network; with the Linux profiler installed it also attaches vapour-profiler to the browser. A summary is printed here when you close the game tab. Toggle the overlay with Ctrl+Shift+F.
+
+Use --player to preview in a production-like iframe shell (sandbox/allow). Add --mobile to enable a phone-style shell preview with --player.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if mobilePreview && !playerMode {
+				return fmt.Errorf("--mobile requires --player")
+			}
 			out := cmd.OutOrStdout()
 			m, err := project.Load(dir)
 			if err != nil {
@@ -49,9 +55,15 @@ over the network; with the Linux profiler installed it also attaches vapour-prof
 			defer closeFS()
 
 			telemetry := !noTelemetry
+			mobileOrientation, mobileRenderScale, mobileMaxDPR := readMobilePreviewSettings(dir)
 			h := devserver.Handler(devserver.Options{
-				FS:        fsys,
-				Telemetry: telemetry,
+				FS:                fsys,
+				Telemetry:         telemetry,
+				Player:            playerMode,
+				Mobile:            mobilePreview,
+				MobileOrientation: mobileOrientation,
+				MobileRenderScale: mobileRenderScale,
+				MobileMaxDPR:      mobileMaxDPR,
 				OnReport: func(r devserver.Report) {
 					fmt.Fprintf(out, "Session: %d frames, avg %.0f fps, 1%% low %.0f fps, worst frame %.0f ms\n",
 						r.Frames, r.AvgFPS, r.Low1FPS, r.WorstMS)
@@ -109,6 +121,8 @@ over the network; with the Linux profiler installed it also attaches vapour-prof
 	cmd.Flags().BoolVar(&noTelemetry, "no-telemetry", false, "do not add the FPS overlay")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "do not open a browser (this also skips the profiler)")
 	cmd.Flags().BoolVar(&noProfile, "no-profile", false, "do not start the eBPF profiler")
+	cmd.Flags().BoolVar(&playerMode, "player", false, "serve a production-like player shell with iframe sandbox/allow")
+	cmd.Flags().BoolVar(&mobilePreview, "mobile", false, "phone-style shell preview (requires --player)")
 	cmd.Flags().StringVar(&profilerBin, "profiler", "", "path to vapour-profiler (default: $VAPOUR_PROFILER, next to vapour, then PATH)")
 	return cmd
 }
@@ -147,4 +161,30 @@ func openBrowser(url string) error {
 		c = exec.Command("xdg-open", url)
 	}
 	return c.Start()
+}
+
+func readMobilePreviewSettings(dir string) (orientation string, renderScale float64, maxDPR *float64) {
+	renderScale = 1
+	b, err := os.ReadFile(filepath.Join(dir, project.File))
+	if err != nil {
+		return "any", renderScale, nil
+	}
+	var raw struct {
+		Mobile struct {
+			Orientation string   `toml:"orientation"`
+			RenderScale *float64 `toml:"render_scale"`
+			MaxDPR      *float64 `toml:"max_dpr"`
+		} `toml:"mobile"`
+	}
+	if err := toml.Unmarshal(b, &raw); err != nil {
+		return "any", renderScale, nil
+	}
+	orientation = raw.Mobile.Orientation
+	if orientation == "" {
+		orientation = "any"
+	}
+	if raw.Mobile.RenderScale != nil && *raw.Mobile.RenderScale > 0 {
+		renderScale = *raw.Mobile.RenderScale
+	}
+	return orientation, renderScale, raw.Mobile.MaxDPR
 }

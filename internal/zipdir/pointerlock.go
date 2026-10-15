@@ -14,11 +14,11 @@ const PointerLockMarker = `data-vapour="pointer-lock"`
 // rejected and the cursor stays visible. The script remembers that the game asked for the lock and
 // repeats the request on the next click. It forgets the request when the game releases the lock,
 // so menus keep a normal cursor. It wraps the standard browser API, so it works for any engine.
-const pointerLockScript = `<script ` + PointerLockMarker + `>(function(){var want=false,P=Element.prototype,rl=P.requestPointerLock,ex=Document.prototype.exitPointerLock;` +
+const pointerLockScript = `<script ` + PointerLockMarker + `>(function(){var want=false,target=null,P=Element.prototype,rl=P.requestPointerLock,ex=Document.prototype.exitPointerLock;` +
 	`function quiet(r){if(r&&r.catch)r.catch(function(){});return r;}` +
-	`P.requestPointerLock=function(){want=true;return quiet(rl.apply(this,arguments));};` +
-	`Document.prototype.exitPointerLock=function(){want=false;return ex.apply(this,arguments);};` +
-	`addEventListener('pointerdown',function(){if(want&&!document.pointerLockElement){var c=document.querySelector('canvas');if(c)quiet(rl.call(c));}},true);})();</script>`
+	`P.requestPointerLock=function(){want=true;target=this;return quiet(rl.apply(this,arguments));};` +
+	`Document.prototype.exitPointerLock=function(){want=false;target=null;return ex.apply(this,arguments);};` +
+	`addEventListener('pointerdown',function(){if(want&&!document.pointerLockElement&&target&&target.isConnected)quiet(rl.call(target));},true);})();</script>`
 
 var headClose = regexp.MustCompile(`(?i)</head\s*>`)
 var headOpen = regexp.MustCompile(`(?i)<head[^>]*>`)

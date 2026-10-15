@@ -158,7 +158,7 @@ type Part struct {
 }
 
 // Publish uploads a build (zip) for a new version, with optional Markdown release notes, streaming the request body.
-func (c *Client) Publish(ctx context.Context, projectID, version, notes string, build File) (*PublishResponse, error) {
+func (c *Client) Publish(ctx context.Context, projectID, version, notes string, metadata map[string]any, build File) (*PublishResponse, error) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
@@ -168,6 +168,15 @@ func (c *Client) Publish(ctx context.Context, projectID, version, notes string, 
 			}
 			if notes != "" {
 				if err := mw.WriteField("notes", notes); err != nil {
+					return err
+				}
+			}
+			if len(metadata) > 0 {
+				b, err := json.Marshal(metadata)
+				if err != nil {
+					return err
+				}
+				if err := mw.WriteField("metadata", string(b)); err != nil {
 					return err
 				}
 			}

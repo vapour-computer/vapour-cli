@@ -18,7 +18,23 @@ var Engines = []string{"godot", "unity", "bevy", "other"}
 type Manifest struct {
 	Project Project `toml:"project"`
 	Build   Build   `toml:"build"`
+	Runtime Runtime `toml:"runtime"`
+	Mobile  Mobile  `toml:"mobile"`
 	Store   Store   `toml:"store"`
+}
+
+type Runtime struct {
+	Threads  bool   `toml:"threads,omitempty"`
+	WebGPU   bool   `toml:"webgpu,omitempty"`
+	MemoryMB *int   `toml:"memory_mb,omitempty"`
+	COEP     string `toml:"coep,omitempty"`
+	Entry    string `toml:"entry,omitempty"`
+}
+
+type Mobile struct {
+	Orientation string   `toml:"orientation,omitempty"`
+	RenderScale *float64 `toml:"render_scale,omitempty"`
+	MaxDPR      *float64 `toml:"max_dpr,omitempty"`
 }
 
 // Store points at the store-page files. Both are optional; paths are relative to the game folder.
@@ -106,7 +122,43 @@ func (m *Manifest) Validate() error {
 	default:
 		return fmt.Errorf("%s: build.pointer_lock must be \"auto\" or \"off\", not %q", File, m.Build.PointerLock)
 	}
+	if m.Runtime.COEP != "" && m.Runtime.COEP != "require-corp" && m.Runtime.COEP != "credentialless" {
+		return fmt.Errorf("%s: runtime.coep must be require-corp or credentialless", File)
+	}
+	if strings.HasPrefix(m.Runtime.Entry, "/") || strings.Contains(m.Runtime.Entry, "..") {
+		return fmt.Errorf("%s: runtime.entry must be a relative safe path", File)
+	}
+	if m.Runtime.MemoryMB != nil && *m.Runtime.MemoryMB <= 0 {
+		return fmt.Errorf("%s: runtime.memory_mb must be > 0", File)
+	}
+	orientation := m.Mobile.Orientation
+	if orientation == "" {
+		orientation = "any"
+	}
+	if orientation != "any" && orientation != "landscape" && orientation != "portrait" {
+		return fmt.Errorf("%s: mobile.orientation must be any, landscape or portrait", File)
+	}
+	if m.Mobile.RenderScale != nil && (*m.Mobile.RenderScale < 0.25 || *m.Mobile.RenderScale > 1.0) {
+		return fmt.Errorf("%s: mobile.render_scale must be between 0.25 and 1.0", File)
+	}
+	if m.Mobile.MaxDPR != nil && *m.Mobile.MaxDPR <= 0 {
+		return fmt.Errorf("%s: mobile.max_dpr must be > 0", File)
+	}
 	return nil
+}
+
+func (m *Manifest) MobileOrientation() string {
+	if m.Mobile.Orientation == "" {
+		return "any"
+	}
+	return m.Mobile.Orientation
+}
+
+func (m *Manifest) MobileRenderScale() float64 {
+	if m.Mobile.RenderScale == nil {
+		return 1
+	}
+	return *m.Mobile.RenderScale
 }
 
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)

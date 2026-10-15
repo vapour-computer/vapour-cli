@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/vapour-computer/vapour-cli/internal/project"
@@ -109,7 +111,7 @@ func Build(ctx context.Context, dir string, m *project.Manifest, out io.Writer) 
 		case "godot":
 			e = godot(ctx, root, dest, out)
 		case "unity":
-			e = unity(ctx, root, dest, out)
+			e = unity(ctx, root, dest, m, out)
 		case "bevy":
 			e = bevy(ctx, root, dest, out)
 		default:
@@ -154,6 +156,10 @@ func godot(ctx context.Context, root, dest string, out io.Writer) error {
 	if e != nil {
 		return fmt.Errorf("Godot requires export_presets.cfg with a Web preset: %w", e)
 	}
+	presetName := strings.TrimSpace(os.Getenv("GODOT_WEB_PRESET"))
+	if presetName == "" {
+		presetName = "Web"
+	}
 	// Match name and platform in the same preset section, tolerating whitespace.
 	valid := false
 	for _, section := range strings.Split(string(preset), "[preset.") {
@@ -164,14 +170,31 @@ func godot(ctx context.Context, root, dest string, out io.Writer) error {
 			if ok {
 				key = strings.TrimSpace(key)
 				value = strings.TrimSpace(value)
-				name = name || (key == "name" && value == `"Web"`)
+				name = name || (key == "name" && value == strconv.Quote(presetName))
 				platform = platform || (key == "platform" && value == `"Web"`)
 			}
 		}
 		valid = valid || (name && platform)
 	}
 	if !valid {
-		return fmt.Errorf("Godot requires a preset named Web with platform Web")
+		return fmt.Errorf("Godot requires a preset named %q with platform Web", presetName)
+	}
+	if !strings.Contains(string(preset), "variant/thread_support=0") {
+		fmt.Fprintln(out, "Warning: Godot Web preset should keep threads off for maximum compatibility (variant/thread_support=0).")
+	}
+	if !strings.Contains(string(preset), "progressive_web_app/enabled=false") {
+		fmt.Fprintln(out, "Warning: Godot Web preset should keep PWA disabled for Vapour exports.")
+	}
+	if !strings.Contains(string(preset), "html/canvas_resize_policy=2") {
+		fmt.Fprintln(out, "Warning: Godot Web preset should set html/canvas_resize_policy=2.")
+	}
+	projectConfig, _ := os.ReadFile(filepath.Join(root, "project.godot"))
+	configText := string(projectConfig)
+	if strings.Contains(configText, `rendering_method="forward_plus"`) || strings.Contains(configText, `rendering_method="mobile"`) {
+		fmt.Fprintln(out, "Warning: Godot Web exports should use Compatibility renderer (renderer/rendering_method=\"gl_compatibility\"); switch from Forward+/Mobile.")
+	}
+	if hasExt(root, ".cs") {
+		fmt.Fprintln(out, "Warning: Godot C# scripts are not supported in standard web exports.")
 	}
 	c := exec.CommandContext(ctx, exe, "--version")
 	c.Dir = root
@@ -190,10 +213,10 @@ func godot(ctx context.Context, root, dest string, out io.Writer) error {
 	if e := run(ctx, root, out, exe, "--headless", "--path", root, "--import"); e != nil {
 		return e
 	}
-	return run(ctx, root, out, exe, "--headless", "--path", root, "--export-release", "Web", filepath.Join(dest, "index.html"))
+	return run(ctx, root, out, exe, "--headless", "--path", root, "--export-release", presetName, filepath.Join(dest, "index.html"))
 }
 
-func unity(ctx context.Context, root, dest string, out io.Writer) error {
+func unity(ctx context.Context, root, dest string, m *project.Manifest, out io.Writer) error {
 	exe, e := tool("UNITY_EDITOR", "Unity")
 	if e != nil {
 		return e
@@ -217,7 +240,21 @@ func unity(ctx context.Context, root, dest string, out io.Writer) error {
 	if p.Dependencies["com.unity.addressables"] == "" {
 		fmt.Fprintln(out, "Warning: Addressables is not configured; split large content into remote Addressables bundles. "+SplitGuide+"/unity.md")
 	}
-	return run(ctx, root, out, exe, "-batchmode", "-quit", "-nographics", "-projectPath", root, "-buildTarget", "WebGL", "-executeMethod", "Vapour.Build.Perform", "-vapourOutput", dest, "-logFile", "-")
+	builderBytes, e := os.ReadFile(filepath.Join(root, "Assets", "Editor", "VapourBuild.cs"))
+	if e == nil {
+		builder := string(builderBytes)
+		for _, needle := range []string{"compressionFormat", "decompressionFallback", "nameFilesAsHashes", "threadsSupport", "memorySize"} {
+			if !strings.Contains(builder, needle) {
+				fmt.Fprintf(out, "Warning: VapourBuild.cs should set %s for web compatibility.\n", needle)
+			}
+		}
+	}
+	args := []string{"-batchmode", "-quit", "-nographics", "-projectPath", root, "-buildTarget", "WebGL", "-executeMethod", "Vapour.Build.Perform", "-vapourOutput", dest, "-vapourThreads", strconv.FormatBool(m.Runtime.Threads)}
+	if m.Runtime.MemoryMB != nil {
+		args = append(args, "-vapourMemoryMB", strconv.Itoa(*m.Runtime.MemoryMB))
+	}
+	args = append(args, "-logFile", "-")
+	return run(ctx, root, out, exe, args...)
 }
 
 func bevy(ctx context.Context, root, dest string, out io.Writer) error {
@@ -227,6 +264,9 @@ func bevy(ctx context.Context, root, dest string, out io.Writer) error {
 	}
 	bindgen, e := tool("WASM_BINDGEN", "wasm-bindgen")
 	if e != nil {
+		return e
+	}
+	if e := checkWasmBindgenVersion(root, bindgen); e != nil {
 		return e
 	}
 	rustup, e := tool("RUSTUP", "rustup")
@@ -303,6 +343,56 @@ func bevy(ctx context.Context, root, dest string, out io.Writer) error {
 		return e
 	}
 	return os.WriteFile(filepath.Join(dest, "index.html"), []byte(`<!doctype html><meta charset="utf-8"><title>Vapour game</title><script type="module">import init from './game.js'; init().catch(console.error);</script>`), 0644)
+}
+
+func checkWasmBindgenVersion(root, bindgen string) error {
+	lockPath := filepath.Join(root, "Cargo.lock")
+	lock, err := os.ReadFile(lockPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	re := regexp.MustCompile(`(?ms)name\s*=\s*"wasm-bindgen"\s*\nversion\s*=\s*"([^"]+)"`)
+	m := re.FindStringSubmatch(string(lock))
+	if len(m) < 2 {
+		return nil
+	}
+	cmd := exec.Command(bindgen, "--version")
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("wasm-bindgen version check failed: %w", err)
+	}
+	toolVersion := strings.TrimSpace(string(out))
+	if i := strings.LastIndex(toolVersion, " "); i >= 0 {
+		toolVersion = toolVersion[i+1:]
+	}
+	if toolVersion != m[1] {
+		return fmt.Errorf("wasm-bindgen-cli %s does not match Cargo.lock wasm-bindgen %s", toolVersion, m[1])
+	}
+	return nil
+}
+
+func hasExt(root, ext string) bool {
+	found := false
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if d.IsDir() {
+			base := filepath.Base(p)
+			if strings.HasPrefix(base, ".") || base == "build" || base == ".godot" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.EqualFold(filepath.Ext(d.Name()), ext) {
+			found = true
+		}
+		return nil
+	})
+	return found
 }
 
 func copyAssets(src, dest string) error {
