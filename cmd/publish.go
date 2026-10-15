@@ -137,6 +137,10 @@ your web export as a new version. Each version can be published once; bump "vers
 			}
 			fmt.Fprintf(out, "Packed %s (%.1f MiB) as version %s\n", m.Build.Dir, float64(st.Size())/(1<<20), m.Project.Version)
 			printBundle(out, bundle)
+			meta, err := publishMetadata(m, dir)
+			if err != nil {
+				return err
+			}
 			if dryRun {
 				fmt.Fprintln(out, "Dry run: nothing uploaded.")
 				return nil
@@ -162,7 +166,7 @@ your web export as a new version. Each version can be published once; bump "vers
 			}
 			defer f.Close()
 			fmt.Fprintf(out, "Uploading version %s to %s ...\n", m.Project.Version, c.Base)
-			res, err := c.Publish(cmd.Context(), m.Project.ID, m.Project.Version, releaseNotes, publishMetadata(m), api.File{Name: "build.zip", Body: f})
+			res, err := c.Publish(cmd.Context(), m.Project.ID, m.Project.Version, releaseNotes, meta, api.File{Name: "build.zip", Body: f})
 			if err != nil {
 				var ae *api.Error
 				if errors.As(err, &ae) && ae.Code == "version_exists" {
@@ -203,7 +207,7 @@ func resolveNotes(inline, file string, b *storepage.Bundle) (string, error) {
 	return s, nil
 }
 
-func publishMetadata(m *project.Manifest) map[string]any {
+func publishMetadata(m *project.Manifest, dir string) (map[string]any, error) {
 	runtime := map[string]any{}
 	if m.Runtime.Threads {
 		runtime["threads"] = true
@@ -227,6 +231,13 @@ func publishMetadata(m *project.Manifest) map[string]any {
 	if m.Mobile.MaxDPR != nil {
 		mobile["max_dpr"] = *m.Mobile.MaxDPR
 	}
+	rotate, err := m.RotateMessageHTML(dir)
+	if err != nil {
+		return nil, err
+	}
+	if rotate != "" {
+		mobile["rotate_message"] = rotate
+	}
 	out := map[string]any{}
 	if len(runtime) > 0 {
 		out["runtime"] = runtime
@@ -234,7 +245,13 @@ func publishMetadata(m *project.Manifest) map[string]any {
 	if len(mobile) > 0 {
 		out["mobile"] = mobile
 	}
-	return out
+	if len(m.Controller.Controls) > 0 {
+		out["controller"] = map[string]any{
+			"mode":     m.Controller.CanonicalMode(),
+			"controls": m.Controller.Controls,
+		}
+	}
+	return out, nil
 }
 
 // prepareZip returns a path to a zip of buildPath and a cleanup function.

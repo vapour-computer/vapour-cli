@@ -30,7 +30,7 @@ func newTemplate() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return createProject(cmd, title, engine, from, offline)
+			return createProject(cmd, title, engine, "desktop", from, offline)
 		},
 	}
 	cmd.Flags().StringVar(&org, "org", defaultTemplateOrg, "GitHub org/user that owns template repos")
