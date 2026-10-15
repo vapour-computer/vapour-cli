@@ -58,10 +58,29 @@ func Check(dir string) error {
 	return nil
 }
 
+// Options changes how Zip packs a folder.
+type Options struct {
+	// PointerLock adds the pointer-lock script to the root index.html inside the zip.
+	// Files on disk are never modified.
+	PointerLock bool
+	// PointerLockEntry selects which HTML file gets the pointer-lock script.
+	// Empty means index.html.
+	PointerLockEntry string
+}
+
 // Zip writes every file under dir to w as a zip with forward-slash paths. It returns the number of files.
 func Zip(dir string, w io.Writer) (int, error) {
+	return ZipWith(dir, w, Options{})
+}
+
+// ZipWith is Zip with options.
+func ZipWith(dir string, w io.Writer, opts Options) (int, error) {
 	zw := zip.NewWriter(w)
 	n := 0
+	injectEntry := filepath.ToSlash(filepath.Clean(opts.PointerLockEntry))
+	if injectEntry == "." || injectEntry == "" {
+		injectEntry = "index.html"
+	}
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -86,6 +105,7 @@ func Zip(dir string, w io.Writer) (int, error) {
 		if err != nil {
 			return err
 		}
+		hName := filepath.ToSlash(rel)
 		f, err := os.Open(p)
 		if err != nil {
 			return err
@@ -100,11 +120,30 @@ func Zip(dir string, w io.Writer) (int, error) {
 			_ = f.Close()
 			return err
 		}
-		h.Name = filepath.ToSlash(rel)
+		h.Name = hName
 		if store {
 			h.Method = zip.Store
 		} else {
 			h.Method = zip.Deflate
+		}
+		if opts.PointerLock && h.Name == injectEntry {
+			raw, err := io.ReadAll(f)
+			if err != nil {
+				_ = f.Close()
+				return err
+			}
+			_ = f.Close()
+			// The size changes, so let the writer compute it.
+			h.UncompressedSize64, h.CompressedSize64, h.CRC32 = 0, 0, 0
+			fw, err := zw.CreateHeader(h)
+			if err != nil {
+				return err
+			}
+			if _, err := fw.Write(InjectPointerLock(raw)); err != nil {
+				return err
+			}
+			n++
+			return nil
 		}
 		fw, err := zw.CreateHeader(h)
 		if err != nil {

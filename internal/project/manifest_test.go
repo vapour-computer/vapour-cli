@@ -71,6 +71,21 @@ func TestManifestRoundTripAndValidate(t *testing.T) {
 	}
 }
 
+func TestPointerLockSetting(t *testing.T) {
+	m := &Manifest{Project: Project{Title: "g", Engine: "godot", Version: "0.1.0"}, Build: Build{Dir: "b"}}
+	if !m.Build.PointerLockEnabled() {
+		t.Error("pointer lock should default to on")
+	}
+	m.Build.PointerLock = "off"
+	if m.Build.PointerLockEnabled() || m.Validate() != nil {
+		t.Error("off should disable and validate")
+	}
+	m.Build.PointerLock = "sometimes"
+	if m.Validate() == nil {
+		t.Error("unknown value accepted")
+	}
+}
+
 func TestMobileDefaults(t *testing.T) {
 	m := &Manifest{}
 	if got := m.MobileOrientation(); got != "any" {
