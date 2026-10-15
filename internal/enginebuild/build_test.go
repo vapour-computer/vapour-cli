@@ -54,12 +54,16 @@ printf 'wasm fixture' > "$BUILD_DEST/game_bg.wasm"
 				t.Setenv(env, exe)
 			}
 			write(t, filepath.Join(root, "project.godot"), "config_version=5")
-			write(t, filepath.Join(root, "export_presets.cfg"), "[preset.0]\nname = \"Web\"\nplatform = \"Web\"\n")
+			write(t, filepath.Join(root, "export_presets.cfg"), "[preset.0]\nname = \"VapourWeb\"\nplatform = \"Web\"\nvariant/thread_support=0\nprogressive_web_app/enabled=false\n")
 			write(t, filepath.Join(root, "Assets/Editor/VapourBuild.cs"), "fixture")
 			write(t, filepath.Join(root, "ProjectSettings/ProjectVersion.txt"), "fixture")
 			write(t, filepath.Join(root, "Packages/manifest.json"), `{"dependencies":{}}`)
 			write(t, filepath.Join(root, "assets/level.bin"), "lazy asset")
-			m := &project.Manifest{Project: project.Project{Engine: engine}, Build: project.Build{Dir: "build/web"}}
+			if engine == "godot" {
+				t.Setenv("GODOT_WEB_PRESET", "VapourWeb")
+			}
+			memory := 256
+			m := &project.Manifest{Project: project.Project{Engine: engine}, Build: project.Build{Dir: "build/web"}, Runtime: project.Runtime{Threads: true, MemoryMB: &memory}}
 			var out bytes.Buffer
 			if e := Build(context.Background(), root, m, &out); e != nil {
 				t.Fatal(e)
@@ -68,9 +72,16 @@ printf 'wasm fixture' > "$BUILD_DEST/game_bg.wasm"
 			if e != nil {
 				t.Fatal(e)
 			}
-			want := map[string]string{"godot": "--export-release Web", "unity": "-executeMethod Vapour.Build.Perform", "bevy": "build --release --target wasm32-unknown-unknown"}[engine]
+			want := map[string]string{"godot": "--export-release VapourWeb", "unity": "-executeMethod Vapour.Build.Perform", "bevy": "build --release --target wasm32-unknown-unknown"}[engine]
 			if !strings.Contains(string(commands), want) {
 				t.Fatalf("missing %q in %s", want, commands)
+			}
+			if engine == "unity" {
+				for _, needle := range []string{"-vapourThreads true", "-vapourMemoryMB 256"} {
+					if !strings.Contains(string(commands), needle) {
+						t.Fatalf("missing %q in %s", needle, commands)
+					}
+				}
 			}
 			b, e := os.ReadFile(filepath.Join(root, ".vapour/build.json"))
 			if e != nil {
