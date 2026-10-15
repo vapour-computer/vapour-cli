@@ -94,6 +94,7 @@ version = "0.1.0"
 
 [build]
 dir = "build/web"   # web export folder, or a .zip file
+pointer_lock = "auto"  # auto (default) | off, see below
 
 [store]
 page = "store/page.json"       # JSON template: details, media files, layout
@@ -130,6 +131,17 @@ right = "d"
 `vapour controller init|check|preview` writes, validates and draws the layout. `preview` prints a landscape
 screen in the terminal with each control labelled; `preview --html` writes a page you can open. The layout
 is uploaded with `vapour publish`.
+
+### Mouse look (`build.pointer_lock`)
+
+Many games capture the mouse once at startup. Browsers refuse that until the player clicks, so the
+cursor stays visible and stops at the screen edge, which blocks mouse-look. When you publish a
+folder, `vapour publish` adds a small script to the root `index.html` inside the upload that repeats
+the request on the player's first click and gives the cursor back when the game releases it. Your
+files on disk are not changed. It wraps the standard browser API, so it works for any engine.
+
+Set `pointer_lock = "off"` if your export already handles this or you want `index.html` untouched.
+A prebuilt `.zip` is uploaded as is, so it is never modified.
 
 Credentials live in `~/.config/vapour/credentials` (mode 0600). Set `--api` or `VAPOUR_API` to point at another server.
 

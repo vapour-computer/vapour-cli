@@ -1,6 +1,8 @@
 package project
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -71,6 +73,21 @@ func TestManifestRoundTripAndValidate(t *testing.T) {
 	}
 }
 
+func TestPointerLockSetting(t *testing.T) {
+	m := &Manifest{Project: Project{Title: "g", Engine: "godot", Version: "0.1.0"}, Build: Build{Dir: "b"}}
+	if !m.Build.PointerLockEnabled() {
+		t.Error("pointer lock should default to on")
+	}
+	m.Build.PointerLock = "off"
+	if m.Build.PointerLockEnabled() || m.Validate() != nil {
+		t.Error("off should disable and validate")
+	}
+	m.Build.PointerLock = "sometimes"
+	if m.Validate() == nil {
+		t.Error("unknown value accepted")
+	}
+}
+
 func TestMobileDefaults(t *testing.T) {
 	m := &Manifest{}
 	if got := m.MobileOrientation(); got != "any" {
@@ -78,5 +95,24 @@ func TestMobileDefaults(t *testing.T) {
 	}
 	if got := m.MobileRenderScale(); got != 1 {
 		t.Fatalf("render scale=%v", got)
+	}
+}
+
+func TestRotateMessageFileRejectsSymlinkOutsideRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "rotate.html"), []byte("<h1>x</h1>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "assets", "outside")); err != nil {
+		t.Skipf("symlink not supported here: %v", err)
+	}
+
+	m := &Manifest{Mobile: Mobile{RotateMessageFile: "assets/outside/rotate.html"}}
+	if _, err := m.RotateMessageHTML(root); err == nil {
+		t.Fatal("expected outside-folder error")
 	}
 }

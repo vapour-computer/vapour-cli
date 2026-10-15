@@ -65,7 +65,7 @@ func TestInstallReleaseReplacesBinaryAndChecksVerification(t *testing.T) {
 
 	self := filepath.Join(t.TempDir(), "vapour")
 	os.WriteFile(self, []byte("old"), 0o755)
-	if err := installRelease(c, rel, self); err != nil {
+	if err := installReleaseForPlatform(runtime.GOOS, runtime.GOARCH, c, rel, self); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(self); string(b) != "new-binary" {
@@ -75,10 +75,19 @@ func TestInstallReleaseReplacesBinaryAndChecksVerification(t *testing.T) {
 	// A wrong checksum must leave the existing binary alone.
 	rel.Assets[1].URL = srv.URL + "/badsums"
 	os.WriteFile(self, []byte("old"), 0o755)
-	if err := installRelease(c, rel, self); err == nil {
+	if err := installReleaseForPlatform(runtime.GOOS, runtime.GOARCH, c, rel, self); err == nil {
 		t.Fatal("expected checksum error")
 	}
 	if b, _ := os.ReadFile(self); string(b) != "old" {
 		t.Fatalf("binary changed despite bad checksum: %q", b)
+	}
+}
+
+func TestInstallReleaseWindowsUnsupported(t *testing.T) {
+	c := &cobra.Command{}
+	if err := installReleaseForPlatform("windows", "amd64", c, &releaseInfo{Tag: "v1.2.3"}, "C:/vapour.exe"); err == nil {
+		t.Fatal("expected windows unsupported error")
+	} else if got := err.Error(); got != "self-update is not supported on Windows; download the zip from the releases page" {
+		t.Fatalf("error = %q", got)
 	}
 }

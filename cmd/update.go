@@ -120,10 +120,14 @@ func fetchRelease(cmd *cobra.Command, version string) (*releaseInfo, error) {
 }
 
 func installRelease(cmd *cobra.Command, rel *releaseInfo, self string) error {
-	if runtime.GOOS == "windows" {
+	return installReleaseForPlatform(runtime.GOOS, runtime.GOARCH, cmd, rel, self)
+}
+
+func installReleaseForPlatform(goos, goarch string, cmd *cobra.Command, rel *releaseInfo, self string) error {
+	if goos == "windows" {
 		return fmt.Errorf("self-update is not supported on Windows; download the zip from the releases page")
 	}
-	archive := fmt.Sprintf("vapour_%s_%s_%s.tar.gz", strings.TrimPrefix(rel.Tag, "v"), runtime.GOOS, runtime.GOARCH)
+	archive := fmt.Sprintf("vapour_%s_%s_%s.tar.gz", strings.TrimPrefix(rel.Tag, "v"), goos, goarch)
 	var archiveURL, sumsURL string
 	for _, a := range rel.Assets {
 		switch a.Name {
@@ -134,7 +138,7 @@ func installRelease(cmd *cobra.Command, rel *releaseInfo, self string) error {
 		}
 	}
 	if archiveURL == "" || sumsURL == "" {
-		return fmt.Errorf("release %s has no build for %s/%s", rel.Tag, runtime.GOOS, runtime.GOARCH)
+		return fmt.Errorf("release %s has no build for %s/%s", rel.Tag, goos, goarch)
 	}
 
 	sums, err := httpGet(cmd, sumsURL)

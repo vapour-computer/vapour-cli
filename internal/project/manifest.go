@@ -71,7 +71,13 @@ type Build struct {
 	// Dir is the web export folder (or a .zip file) to publish.
 	Dir   string `toml:"dir"`
 	Cover string `toml:"cover,omitempty"`
+	// PointerLock controls the mouse-capture fix added to index.html when publishing a folder:
+	// "auto" (the default) adds it, "off" leaves index.html as exported.
+	PointerLock string `toml:"pointer_lock,omitempty"`
 }
+
+// PointerLockEnabled reports whether publish should add the pointer-lock script.
+func (b Build) PointerLockEnabled() bool { return b.PointerLock != "off" }
 
 var versionRe = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+_-]*$`)
 
@@ -124,6 +130,11 @@ func (m *Manifest) Validate() error {
 	}
 	if err := m.Controller.Validate(); err != nil {
 		return fmt.Errorf("%s: %w", File, err)
+	}
+	switch m.Build.PointerLock {
+	case "", "auto", "off":
+	default:
+		return fmt.Errorf("%s: build.pointer_lock must be \"auto\" or \"off\", not %q", File, m.Build.PointerLock)
 	}
 	if m.Runtime.COEP != "" && m.Runtime.COEP != "require-corp" && m.Runtime.COEP != "credentialless" {
 		return fmt.Errorf("%s: runtime.coep must be require-corp or credentialless", File)
@@ -194,11 +205,19 @@ func (m *Manifest) RotateMessageHTML(dir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		root, err = filepath.EvalSymlinks(root)
+		if err != nil {
+			return "", err
+		}
 		p := filepath.Join(root, f)
-		if rel, err := filepath.Rel(root, p); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		resolved, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			return "", fmt.Errorf("%s: mobile.rotate_message_file: %w", File, err)
+		}
+		if rel, err := filepath.Rel(root, resolved); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return "", fmt.Errorf("%s: mobile.rotate_message_file must be inside the game folder", File)
 		}
-		b, err := os.ReadFile(p)
+		b, err := os.ReadFile(resolved)
 		if err != nil {
 			return "", fmt.Errorf("%s: mobile.rotate_message_file: %w", File, err)
 		}
