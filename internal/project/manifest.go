@@ -47,7 +47,13 @@ type Build struct {
 	// Dir is the web export folder (or a .zip file) to publish.
 	Dir   string `toml:"dir"`
 	Cover string `toml:"cover,omitempty"`
+	// PointerLock controls the mouse-capture fix added to index.html when publishing a folder:
+	// "auto" (the default) adds it, "off" leaves index.html as exported.
+	PointerLock string `toml:"pointer_lock,omitempty"`
 }
+
+// PointerLockEnabled reports whether publish should add the pointer-lock script.
+func (b Build) PointerLockEnabled() bool { return b.PointerLock != "off" }
 
 var versionRe = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+_-]*$`)
 
@@ -94,6 +100,11 @@ func (m *Manifest) Validate() error {
 	}
 	if strings.TrimSpace(m.Build.Dir) == "" {
 		return fmt.Errorf("%s: build.dir is required (your web export folder or .zip)", File)
+	}
+	switch m.Build.PointerLock {
+	case "", "auto", "off":
+	default:
+		return fmt.Errorf("%s: build.pointer_lock must be \"auto\" or \"off\", not %q", File, m.Build.PointerLock)
 	}
 	return nil
 }

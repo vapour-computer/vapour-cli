@@ -123,7 +123,7 @@ your web export as a new version. Each version can be published once; bump "vers
 				fmt.Fprintf(out, "Finalized chunk manifest %s; uploaded %d bytes\n", manifest.Version, n)
 				return nil
 			}
-			zipPath, cleanup, err := prepareZip(buildPath)
+			zipPath, cleanup, err := prepareZip(buildPath, m.Build.PointerLockEnabled())
 			if err != nil {
 				return err
 			}
@@ -204,7 +204,7 @@ func resolveNotes(inline, file string, b *storepage.Bundle) (string, error) {
 }
 
 // prepareZip returns a path to a zip of buildPath and a cleanup function.
-func prepareZip(buildPath string) (string, func(), error) {
+func prepareZip(buildPath string, pointerLock bool) (string, func(), error) {
 	noop := func() {}
 	st, err := os.Stat(buildPath)
 	if err != nil {
@@ -224,7 +224,7 @@ func prepareZip(buildPath string) (string, func(), error) {
 		return "", noop, err
 	}
 	cleanup := func() { os.Remove(tmp.Name()) }
-	if _, err := zipdir.Zip(buildPath, io.Writer(tmp)); err != nil {
+	if _, err := zipdir.ZipWith(buildPath, io.Writer(tmp), zipdir.Options{PointerLock: pointerLock}); err != nil {
 		tmp.Close()
 		cleanup()
 		return "", noop, err
