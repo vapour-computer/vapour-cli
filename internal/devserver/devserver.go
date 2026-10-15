@@ -6,7 +6,6 @@ package devserver
 
 import (
 	_ "embed"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -94,7 +93,7 @@ func Handler(o Options) http.Handler {
 			serveIndex(w, o)
 			return
 		}
-		serveBuildFile(w, r, o.FS, strings.TrimPrefix(path.Clean(r.URL.Path), "/"))
+		serveBuildFile(w, r, o.FS, strings.TrimPrefix(path.Clean(r.URL.Path), "/"), o.Mobile)
 	})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -114,10 +113,14 @@ func servePlayer(w http.ResponseWriter, r *http.Request, o Options) {
 		mobileScript := ""
 		if o.Mobile {
 			mobileClass = " mobile"
-			mobileScript = `<script>window.__vapourMobilePreview=true;</script>`
+			mobileScript = `<script>window.__vapourMobilePreview=true;(function(){const gate=document.getElementById('rotate-gate');const update=()=>{if(!gate)return;const portrait=matchMedia('(orientation: portrait)').matches;gate.style.display=portrait?'flex':'none';};addEventListener('orientationchange',update);addEventListener('resize',update);update();})();</script>`
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body class="`+mobileClass+`"><style>html,body{margin:0;height:100%;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}.wrap{height:100%;display:flex;flex-direction:column}.gate{padding:10px}.stage{flex:1;display:flex}.mobile .stage{max-width:430px;max-height:932px;margin:auto}iframe{border:0;width:100%;height:100%}</style><div class="wrap"><div class="gate"><button id="play">Play</button></div><div class="stage"><iframe id="vapour-frame" src="`+playPrefix+`index.html" sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-orientation-lock allow-presentation" allow="fullscreen; gamepad; autoplay; cross-origin-isolated; keyboard-lock; clipboard-read; clipboard-write; xr-spatial-tracking; screen-wake-lock; accelerometer; gyroscope; web-share"></iframe></div></div><script>document.getElementById('play').addEventListener('click',()=>{const f=document.getElementById('vapour-frame');f.focus();f.contentWindow&&f.contentWindow.focus();});</script>`+mobileScript+`</body></html>`)
+		iframeSrc := playPrefix + "index.html"
+		if o.Mobile {
+			iframeSrc += "?__vapour_mobile=1"
+		}
+		_, _ = io.WriteString(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body class="`+mobileClass+`"><style>html,body{margin:0;height:100%;background:#0b1020;color:#e5e7eb;font-family:system-ui,sans-serif}.wrap{height:100%;display:flex;flex-direction:column}.gate{padding:10px}.stage{flex:1;display:flex;position:relative}.mobile .stage{max-width:430px;max-height:932px;margin:auto}#rotate-gate{position:absolute;inset:0;background:rgba(0,0,0,.8);color:#fff;display:none;align-items:center;justify-content:center;z-index:5;text-align:center;padding:16px}iframe{border:0;width:100%;height:100%}</style><div class="wrap"><div class="gate"><button id="play">Play</button></div><div class="stage"><div id="rotate-gate">Rotate device to landscape</div><iframe id="vapour-frame" src="`+iframeSrc+`" sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-orientation-lock allow-presentation" allow="fullscreen; gamepad; autoplay; cross-origin-isolated; keyboard-lock; clipboard-read; clipboard-write; xr-spatial-tracking; screen-wake-lock; accelerometer; gyroscope; web-share"></iframe></div></div><script>document.getElementById('play').addEventListener('click',()=>{const f=document.getElementById('vapour-frame');f.focus();f.contentWindow&&f.contentWindow.focus();});</script>`+mobileScript+`</body></html>`)
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/play/local") {
@@ -128,7 +131,7 @@ func servePlayer(w http.ResponseWriter, r *http.Request, o Options) {
 	if rel == "" || rel == "/" {
 		rel = "index.html"
 	}
-	serveBuildFile(w, r, o.FS, rel)
+	serveBuildFile(w, r, o.FS, rel, o.Mobile)
 }
 
 func serveIndex(w http.ResponseWriter, o Options) {
@@ -144,19 +147,83 @@ func serveIndex(w http.ResponseWriter, o Options) {
 	_, _ = w.Write(b)
 }
 
-func serveBuildFile(w http.ResponseWriter, r *http.Request, root fs.FS, rel string) {
+func serveBuildFile(w http.ResponseWriter, r *http.Request, root fs.FS, rel string, mobile bool) {
 	rel = strings.TrimPrefix(path.Clean("/"+rel), "/")
-	b, err := fs.ReadFile(root, rel)
+	f, err := root.Open(rel)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+	rs, ok := f.(io.ReadSeeker)
+	if !ok {
+		http.Error(w, "file does not support seeking", http.StatusInternalServerError)
+		return
+	}
 	ctype, cenc := contentHeadersForPath(rel)
+	if strings.HasSuffix(strings.ToLower(rel), ".unityweb") {
+		if sniffed := sniffUnitywebEncoding(rs); sniffed != "" {
+			cenc = sniffed
+		}
+	}
+	if mobile && (rel == "index.html" || strings.HasSuffix(strings.ToLower(rel), "/index.html")) && r.Method != http.MethodHead && r.URL.Query().Get("__vapour_mobile") == "1" {
+		html, err := io.ReadAll(rs)
+		if err == nil {
+			mobileRuntime := `<script>window.__VAPOUR_RUNTIME_SETTINGS={"mobile":{"orientation":"landscape","render_scale":0.75,"max_dpr":2}};(function(){const s=window.__VAPOUR_RUNTIME_SETTINGS.mobile||{};let dpr=window.devicePixelRatio||1;if(typeof s.render_scale==='number'&&s.render_scale>0)dpr=dpr/s.render_scale;if(typeof s.max_dpr==='number'&&s.max_dpr>0)dpr=Math.min(dpr,s.max_dpr);try{Object.defineProperty(window,'devicePixelRatio',{configurable:true,get:()=>dpr});}catch{}})();</script>`
+			text := string(html)
+			lower := strings.ToLower(text)
+			if i := strings.Index(lower, "<head>"); i >= 0 {
+				insertAt := i + len("<head>")
+				text = text[:insertAt] + mobileRuntime + text[insertAt:]
+			} else {
+				text = mobileRuntime + text
+			}
+			w.Header().Set("Content-Type", ctype)
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = io.WriteString(w, text)
+			return
+		}
+		_, _ = rs.Seek(0, io.SeekStart)
+	}
 	w.Header().Set("Content-Type", ctype)
 	if cenc != "" {
 		w.Header().Set("Content-Encoding", cenc)
 	}
-	http.ServeContent(w, r, rel, time.Time{}, bytes.NewReader(b))
+	http.ServeContent(w, r, rel, info.ModTime(), rs)
+}
+
+func sniffUnitywebEncoding(rs io.ReadSeeker) string {
+	if _, err := rs.Seek(0, io.SeekStart); err != nil {
+		return ""
+	}
+	buf := make([]byte, 512)
+	n, _ := rs.Read(buf)
+	_, _ = rs.Seek(0, io.SeekStart)
+	buf = buf[:n]
+	if len(buf) >= 2 && buf[0] == 0x1f && buf[1] == 0x8b {
+		return "gzip"
+	}
+	if bytesContains(buf, []byte("UnityWeb Compressed Content (brotli)")) {
+		return "br"
+	}
+	return ""
+}
+
+func bytesContains(haystack, needle []byte) bool {
+	if len(needle) == 0 || len(haystack) < len(needle) {
+		return false
+	}
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		if string(haystack[i:i+len(needle)]) == string(needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func contentHeadersForPath(rel string) (contentType, contentEncoding string) {

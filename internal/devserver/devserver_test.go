@@ -74,7 +74,7 @@ func TestPlayerModeServesIframeShell(t *testing.T) {
 		t.Fatalf("shell status: %d", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "sandbox=\"allow-scripts allow-same-origin") || !strings.Contains(body, "src=\"/play/local/index.html\"") {
+	if !strings.Contains(body, "sandbox=\"allow-scripts allow-same-origin") || !strings.Contains(body, "src=\"/play/local/index.html?__vapour_mobile=1\"") {
 		t.Fatalf("shell missing iframe attrs: %s", body)
 	}
 
