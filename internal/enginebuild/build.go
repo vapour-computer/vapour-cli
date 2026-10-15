@@ -189,8 +189,9 @@ func godot(ctx context.Context, root, dest string, out io.Writer) error {
 		fmt.Fprintln(out, "Warning: Godot Web preset should set html/canvas_resize_policy=2.")
 	}
 	projectConfig, _ := os.ReadFile(filepath.Join(root, "project.godot"))
-	if strings.Contains(string(projectConfig), `rendering_method="forward_plus"`) {
-		fmt.Fprintln(out, "Warning: Godot Forward+ renderer is heavy on mobile browsers; prefer Mobile renderer for web exports.")
+	configText := string(projectConfig)
+	if strings.Contains(configText, `rendering_method="forward_plus"`) || strings.Contains(configText, `rendering_method="mobile"`) {
+		fmt.Fprintln(out, "Warning: Godot Web exports should use Compatibility renderer (renderer/rendering_method=\"gl_compatibility\"); switch from Forward+/Mobile.")
 	}
 	if hasExt(root, ".cs") {
 		fmt.Fprintln(out, "Warning: Godot C# scripts are not supported in standard web exports.")
