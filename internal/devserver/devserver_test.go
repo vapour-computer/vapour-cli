@@ -84,6 +84,21 @@ func TestPlayerModeServesIframeShell(t *testing.T) {
 	}
 }
 
+func TestMobilePreviewInjectsConfiguredRuntimeHints(t *testing.T) {
+	maxDpr := 1.5
+	w := get(t, Handler(Options{FS: site(), Player: true, Mobile: true, MobileOrientation: "landscape", MobileRenderScale: 0.5, MobileMaxDPR: &maxDpr}), "GET", "/play/local/index.html?__vapour_mobile=1", nil, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("mobile page status: %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"orientation":"landscape"`) || !strings.Contains(body, `"render_scale":0.5`) || !strings.Contains(body, `"max_dpr":1.5`) {
+		t.Fatalf("missing configured runtime settings: %s", body)
+	}
+	if !strings.Contains(body, "dpr=dpr*s.render_scale") {
+		t.Fatalf("expected downscale multiplication not found: %s", body)
+	}
+}
+
 func TestReport(t *testing.T) {
 	var got Report
 	h := Handler(Options{FS: site(), Telemetry: true, OnReport: func(r Report) { got = r }})

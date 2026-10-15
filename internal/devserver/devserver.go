@@ -50,6 +50,12 @@ type Options struct {
 	Player bool
 	// Mobile enables phone-like shell sizing/hints for --player previews.
 	Mobile bool
+	// MobileOrientation mirrors vapour.toml [mobile].orientation.
+	MobileOrientation string
+	// MobileRenderScale mirrors vapour.toml [mobile].render_scale.
+	MobileRenderScale float64
+	// MobileMaxDPR mirrors vapour.toml [mobile].max_dpr.
+	MobileMaxDPR *float64
 }
 
 func init() {
@@ -93,7 +99,7 @@ func Handler(o Options) http.Handler {
 			serveIndex(w, o)
 			return
 		}
-		serveBuildFile(w, r, o.FS, strings.TrimPrefix(path.Clean(r.URL.Path), "/"), o.Mobile)
+		serveBuildFile(w, r, o, strings.TrimPrefix(path.Clean(r.URL.Path), "/"))
 	})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +119,11 @@ func servePlayer(w http.ResponseWriter, r *http.Request, o Options) {
 		mobileScript := ""
 		if o.Mobile {
 			mobileClass = " mobile"
-			mobileScript = `<script>window.__vapourMobilePreview=true;(function(){const gate=document.getElementById('rotate-gate');const update=()=>{if(!gate)return;const portrait=matchMedia('(orientation: portrait)').matches;gate.style.display=portrait?'flex':'none';};addEventListener('orientationchange',update);addEventListener('resize',update);update();})();</script>`
+			orientation := o.MobileOrientation
+			if orientation == "" {
+				orientation = "any"
+			}
+			mobileScript = `<script>window.__vapourMobilePreview=true;(function(){const gate=document.getElementById('rotate-gate');const update=()=>{if(!gate)return;const portrait=matchMedia('(orientation: portrait)').matches;if("` + orientation + `"==="landscape")gate.style.display=portrait?'flex':'none';else if("` + orientation + `"==="portrait")gate.style.display=portrait?'none':'flex';else gate.style.display='none';};addEventListener('orientationchange',update);addEventListener('resize',update);update();})();</script>`
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		iframeSrc := playPrefix + "index.html"
@@ -131,7 +141,7 @@ func servePlayer(w http.ResponseWriter, r *http.Request, o Options) {
 	if rel == "" || rel == "/" {
 		rel = "index.html"
 	}
-	serveBuildFile(w, r, o.FS, rel, o.Mobile)
+	serveBuildFile(w, r, o, rel)
 }
 
 func serveIndex(w http.ResponseWriter, o Options) {
@@ -147,7 +157,8 @@ func serveIndex(w http.ResponseWriter, o Options) {
 	_, _ = w.Write(b)
 }
 
-func serveBuildFile(w http.ResponseWriter, r *http.Request, root fs.FS, rel string, mobile bool) {
+func serveBuildFile(w http.ResponseWriter, r *http.Request, o Options, rel string) {
+	root := o.FS
 	rel = strings.TrimPrefix(path.Clean("/"+rel), "/")
 	f, err := root.Open(rel)
 	if err != nil {
@@ -171,10 +182,22 @@ func serveBuildFile(w http.ResponseWriter, r *http.Request, root fs.FS, rel stri
 			cenc = sniffed
 		}
 	}
-	if mobile && (rel == "index.html" || strings.HasSuffix(strings.ToLower(rel), "/index.html")) && r.Method != http.MethodHead && r.URL.Query().Get("__vapour_mobile") == "1" {
+	if o.Mobile && (rel == "index.html" || strings.HasSuffix(strings.ToLower(rel), "/index.html")) && r.Method != http.MethodHead && r.URL.Query().Get("__vapour_mobile") == "1" {
 		html, err := io.ReadAll(rs)
 		if err == nil {
-			mobileRuntime := `<script>window.__VAPOUR_RUNTIME_SETTINGS={"mobile":{"orientation":"landscape","render_scale":0.75,"max_dpr":2}};(function(){const s=window.__VAPOUR_RUNTIME_SETTINGS.mobile||{};let dpr=window.devicePixelRatio||1;if(typeof s.render_scale==='number'&&s.render_scale>0)dpr=dpr/s.render_scale;if(typeof s.max_dpr==='number'&&s.max_dpr>0)dpr=Math.min(dpr,s.max_dpr);try{Object.defineProperty(window,'devicePixelRatio',{configurable:true,get:()=>dpr});}catch{}})();</script>`
+			orientation := o.MobileOrientation
+			if orientation == "" {
+				orientation = "any"
+			}
+			renderScale := o.MobileRenderScale
+			if renderScale <= 0 {
+				renderScale = 1
+			}
+			maxDpr := "null"
+			if o.MobileMaxDPR != nil {
+				maxDpr = strconv.FormatFloat(*o.MobileMaxDPR, 'f', -1, 64)
+			}
+			mobileRuntime := `<script>window.__VAPOUR_RUNTIME_SETTINGS={"mobile":{"orientation":"` + orientation + `","render_scale":` + strconv.FormatFloat(renderScale, 'f', -1, 64) + `,"max_dpr":` + maxDpr + `}};(function(){const s=window.__VAPOUR_RUNTIME_SETTINGS.mobile||{};let dpr=window.devicePixelRatio||1;if(typeof s.render_scale==='number'&&s.render_scale>0)dpr=dpr*s.render_scale;if(typeof s.max_dpr==='number'&&s.max_dpr>0)dpr=Math.min(dpr,s.max_dpr);try{Object.defineProperty(window,'devicePixelRatio',{configurable:true,get:()=>dpr});}catch{}})();</script>`
 			text := string(html)
 			lower := strings.ToLower(text)
 			if i := strings.Index(lower, "<head>"); i >= 0 {

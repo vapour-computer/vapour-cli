@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 	"github.com/vapour-computer/vapour-cli/internal/devserver"
 	"github.com/vapour-computer/vapour-cli/internal/localprofile"
@@ -54,11 +55,15 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 			defer closeFS()
 
 			telemetry := !noTelemetry
+			mobileOrientation, mobileRenderScale, mobileMaxDPR := readMobilePreviewSettings(dir)
 			h := devserver.Handler(devserver.Options{
-				FS:        fsys,
-				Telemetry: telemetry,
-				Player:    playerMode,
-				Mobile:    mobilePreview,
+				FS:                fsys,
+				Telemetry:         telemetry,
+				Player:            playerMode,
+				Mobile:            mobilePreview,
+				MobileOrientation: mobileOrientation,
+				MobileRenderScale: mobileRenderScale,
+				MobileMaxDPR:      mobileMaxDPR,
 				OnReport: func(r devserver.Report) {
 					fmt.Fprintf(out, "Session: %d frames, avg %.0f fps, 1%% low %.0f fps, worst frame %.0f ms\n",
 						r.Frames, r.AvgFPS, r.Low1FPS, r.WorstMS)
@@ -156,4 +161,30 @@ func openBrowser(url string) error {
 		c = exec.Command("xdg-open", url)
 	}
 	return c.Start()
+}
+
+func readMobilePreviewSettings(dir string) (orientation string, renderScale float64, maxDPR *float64) {
+	renderScale = 1
+	b, err := os.ReadFile(filepath.Join(dir, project.File))
+	if err != nil {
+		return "any", renderScale, nil
+	}
+	var raw struct {
+		Mobile struct {
+			Orientation string   `toml:"orientation"`
+			RenderScale *float64 `toml:"render_scale"`
+			MaxDPR      *float64 `toml:"max_dpr"`
+		} `toml:"mobile"`
+	}
+	if err := toml.Unmarshal(b, &raw); err != nil {
+		return "any", renderScale, nil
+	}
+	orientation = raw.Mobile.Orientation
+	if orientation == "" {
+		orientation = "any"
+	}
+	if raw.Mobile.RenderScale != nil && *raw.Mobile.RenderScale > 0 {
+		renderScale = *raw.Mobile.RenderScale
+	}
+	return orientation, renderScale, raw.Mobile.MaxDPR
 }
