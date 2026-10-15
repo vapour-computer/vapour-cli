@@ -9,8 +9,16 @@ A Godot game for [Vapour](https://vapour.ink).
 
 ## Export for web
 
-1. In Godot: **Project → Export → Add… → Web**, then **Export Project** into `build/web/`
-   (keep the file name `index.html`).
+1. This template includes `export_presets.cfg` with a **Web** preset.
+2. Open Godot and check **Project → Export**:
+   - Preset name: `Web`
+   - Threads: **off** (`threads/thread_model=0`)
+   - PWA: **off**
+   - Canvas resize policy: `2` (project-controlled)
+3. Export to `build/web/index.html`.
+
+If you switch to Forward+/Mobile renderer or C#, verify your web export in browser early.
+Some combinations can regress startup time or compatibility.
 
 ## Publish to Vapour
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/vapour-computer/vapour-cli/internal/project"
@@ -173,6 +174,15 @@ func godot(ctx context.Context, root, dest string, out io.Writer) error {
 	if !valid {
 		return fmt.Errorf("Godot requires a preset named Web with platform Web")
 	}
+	if !strings.Contains(string(preset), "threads/thread_model=0") {
+		fmt.Fprintln(out, "Warning: Godot Web preset should keep threads off for maximum compatibility (threads/thread_model=0).")
+	}
+	if !strings.Contains(string(preset), "pwa/enabled=false") {
+		fmt.Fprintln(out, "Warning: Godot Web preset should keep PWA disabled for Vapour exports.")
+	}
+	if !strings.Contains(string(preset), "html/canvas_resize_policy=2") {
+		fmt.Fprintln(out, "Warning: Godot Web preset should set html/canvas_resize_policy=2.")
+	}
 	c := exec.CommandContext(ctx, exe, "--version")
 	c.Dir = root
 	b, e := c.Output()
@@ -217,6 +227,15 @@ func unity(ctx context.Context, root, dest string, out io.Writer) error {
 	if p.Dependencies["com.unity.addressables"] == "" {
 		fmt.Fprintln(out, "Warning: Addressables is not configured; split large content into remote Addressables bundles. "+SplitGuide+"/unity.md")
 	}
+	builderBytes, e := os.ReadFile(filepath.Join(root, "Assets", "Editor", "VapourBuild.cs"))
+	if e == nil {
+		builder := string(builderBytes)
+		for _, needle := range []string{"compressionFormat", "decompressionFallback", "nameFilesAsHashes"} {
+			if !strings.Contains(builder, needle) {
+				fmt.Fprintf(out, "Warning: VapourBuild.cs should set %s for web compatibility.\n", needle)
+			}
+		}
+	}
 	return run(ctx, root, out, exe, "-batchmode", "-quit", "-nographics", "-projectPath", root, "-buildTarget", "WebGL", "-executeMethod", "Vapour.Build.Perform", "-vapourOutput", dest, "-logFile", "-")
 }
 
@@ -227,6 +246,9 @@ func bevy(ctx context.Context, root, dest string, out io.Writer) error {
 	}
 	bindgen, e := tool("WASM_BINDGEN", "wasm-bindgen")
 	if e != nil {
+		return e
+	}
+	if e := checkWasmBindgenVersion(root, bindgen); e != nil {
 		return e
 	}
 	rustup, e := tool("RUSTUP", "rustup")
@@ -303,6 +325,35 @@ func bevy(ctx context.Context, root, dest string, out io.Writer) error {
 		return e
 	}
 	return os.WriteFile(filepath.Join(dest, "index.html"), []byte(`<!doctype html><meta charset="utf-8"><title>Vapour game</title><script type="module">import init from './game.js'; init().catch(console.error);</script>`), 0644)
+}
+
+func checkWasmBindgenVersion(root, bindgen string) error {
+	lockPath := filepath.Join(root, "Cargo.lock")
+	lock, err := os.ReadFile(lockPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	re := regexp.MustCompile(`(?ms)name\s*=\s*"wasm-bindgen"\s*\nversion\s*=\s*"([^"]+)"`)
+	m := re.FindStringSubmatch(string(lock))
+	if len(m) < 2 {
+		return nil
+	}
+	cmd := exec.Command(bindgen, "--version")
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("wasm-bindgen version check failed: %w", err)
+	}
+	toolVersion := strings.TrimSpace(string(out))
+	if i := strings.LastIndex(toolVersion, " "); i >= 0 {
+		toolVersion = toolVersion[i+1:]
+	}
+	if toolVersion != m[1] {
+		return fmt.Errorf("wasm-bindgen-cli %s does not match Cargo.lock wasm-bindgen %s", toolVersion, m[1])
+	}
+	return nil
 }
 
 func copyAssets(src, dest string) error {
