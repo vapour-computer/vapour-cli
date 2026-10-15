@@ -24,10 +24,11 @@ type Manifest struct {
 }
 
 type Runtime struct {
-	Threads bool   `toml:"threads,omitempty"`
-	WebGPU  bool   `toml:"webgpu,omitempty"`
-	COEP    string `toml:"coep,omitempty"`
-	Entry   string `toml:"entry,omitempty"`
+	Threads  bool   `toml:"threads,omitempty"`
+	WebGPU   bool   `toml:"webgpu,omitempty"`
+	MemoryMB *int   `toml:"memory_mb,omitempty"`
+	COEP     string `toml:"coep,omitempty"`
+	Entry    string `toml:"entry,omitempty"`
 }
 
 type Mobile struct {
@@ -115,6 +116,9 @@ func (m *Manifest) Validate() error {
 	}
 	if strings.HasPrefix(m.Runtime.Entry, "/") || strings.Contains(m.Runtime.Entry, "..") {
 		return fmt.Errorf("%s: runtime.entry must be a relative safe path", File)
+	}
+	if m.Runtime.MemoryMB != nil && *m.Runtime.MemoryMB <= 0 {
+		return fmt.Errorf("%s: runtime.memory_mb must be > 0", File)
 	}
 	orientation := m.Mobile.Orientation
 	if orientation == "" {

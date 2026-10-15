@@ -59,6 +59,13 @@ func TestManifestRoundTripAndValidate(t *testing.T) {
 	if got.Validate() == nil {
 		t.Error("bad render_scale accepted")
 	}
+	rs = 0.75
+	got.Mobile.RenderScale = &rs
+	memory := 0
+	got.Runtime.MemoryMB = &memory
+	if got.Validate() == nil {
+		t.Error("bad runtime.memory_mb accepted")
+	}
 	if _, err := Load(t.TempDir()); err == nil {
 		t.Error("missing manifest accepted")
 	}
