@@ -70,6 +70,12 @@ type Game struct {
 	Status   string `json:"status"`
 	Category string `json:"category"`
 	Tagline  string `json:"tagline"`
+	Releases []Release `json:"releases"`
+}
+
+// Release is one published version of a game.
+type Release struct {
+	Version string `json:"version"`
 }
 
 type MeResponse struct {
@@ -139,6 +145,15 @@ func (c *Client) CreateProject(ctx context.Context, req CreateProjectRequest) (*
 	b, _ := json.Marshal(req)
 	var g Game
 	if err := c.do(ctx, http.MethodPost, "/projects", bytes.NewReader(b), "application/json", &g); err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+// GetProject fetches the owner's view of a project, including its published releases.
+func (c *Client) GetProject(ctx context.Context, id string) (*Game, error) {
+	var g Game
+	if err := c.do(ctx, http.MethodGet, "/projects/"+id, nil, "", &g); err != nil {
 		return nil, err
 	}
 	return &g, nil

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -79,6 +80,12 @@ your web export as a new version. Each version can be published once; bump "vers
 			if err := ensureProject(cmd.Context(), c, m, dir); err != nil {
 				return err
 			}
+			// A version can be published once: check the existing releases before
+			// uploading anything, so a repeat fails fast and tells the developer
+			// to change the config.
+			if err := checkVersionFree(cmd.Context(), c, m.Project.ID, m.Project.Version); err != nil {
+				return err
+			}
 			// Store page first: if its media is rejected we stop before a version is used up.
 			if bundle != nil {
 				if err := pushStore(cmd.Context(), out, c, m, bundle); err != nil {
@@ -111,6 +118,20 @@ your web export as a new version. Each version can be published once; bump "vers
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "check and zip everything, but do not upload")
 	cmd.Flags().BoolVar(&skipStore, "skip-store", false, "publish the build only; leave the store page as it is")
 	return cmd
+}
+
+// checkVersionFree rejects a version that is already published before anything is uploaded.
+func checkVersionFree(ctx context.Context, c *api.Client, projectID, version string) error {
+	g, err := c.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, r := range g.Releases {
+		if r.Version == version {
+			return fmt.Errorf("version %s is already published. Bump \"version\" in vapour.toml (or pass --version) and run publish again", version)
+		}
+	}
+	return nil
 }
 
 // resolveNotes picks the release notes: --notes-file, then --notes, then store.notes from vapour.toml.
