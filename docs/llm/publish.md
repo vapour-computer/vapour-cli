@@ -5,7 +5,7 @@ Flags: `--dir`, required `--version`, exactly one of `--notes` or `--notes-file`
 
 Order for default ZIP publishing: load + validate manifest → load store bundle (unless `--skip-store`) → resolve release notes
 (`--notes-file` or `--notes`, non-empty after trimming; ≤5000 chars) → pack the build → scan the ZIP → sign it and write
-`.vapour/build.zip.attestation.json` → (stop here on `--dry-run`) → register project if no id → push store page → upload
+`.vapour/build.zip.attestation.json` → verify the signed ZIP locally → (stop here on `--dry-run`) → register project if no id → push store page → upload
 build and attestation. Store goes first so rejected media doesn't use up a version. The server verifies the ZIP, then an
 admin reviews the version before it goes live.
 
@@ -26,6 +26,10 @@ Unless suppressed by `--no-perf-hints`, command output also includes warnings fr
 A version can be published once: API error `version_exists` becomes "pass a new --version".
 Success prints the game URL.
 
-`--experimental-chunks`: opt-in content-addressed chunk protocol (`pkg/delivery/README.md`); the deployed API doesn't
-implement it yet. Default remains ZIP. The chunk path scans but does not send a signed ZIP attestation or release notes.
-Upload chunk URLs must be HTTPS and on an allowlisted public host.
+`--experimental-chunks`: its dry run still scans, but real chunk uploads are blocked until this protocol can provide
+a signed attestation that the API can verify. Use ZIP publishing for uploads. The deployed API does not implement the
+chunk protocol yet. Upload chunk URLs must be HTTPS and on an allowlisted public host.
+
+The API requires an attestation on every ZIP upload and verifies its Ed25519 signature, key identity, ZIP SHA-256 and
+size before writing the build. Missing or forged attestations fail with `verification_required` or `verification_failed`.
+The CLI's local check does not replace the server's check.

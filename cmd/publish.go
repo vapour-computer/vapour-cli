@@ -16,6 +16,7 @@ import (
 	"github.com/vapour-computer/vapour-cli/internal/project"
 	"github.com/vapour-computer/vapour-cli/internal/storepage"
 	"github.com/vapour-computer/vapour-cli/internal/zipdir"
+	"github.com/vapour-computer/vapour-cli/internal/zipsign"
 	"github.com/vapour-computer/vapour-cli/pkg/delivery"
 )
 
@@ -67,6 +68,9 @@ Release notes are required with --notes or --notes-file.`,
 				return err
 			}
 			if chunked {
+				if !dryRun {
+					return errors.New("--experimental-chunks cannot upload without a signed build attestation; use ZIP publishing")
+				}
 				if err := scanFolder(out, buildPath); err != nil {
 					return err
 				}
@@ -159,6 +163,15 @@ Release notes are required with --notes or --notes-file.`,
 			attestation, err := signZip(out, zipPath, dir, report)
 			if err != nil {
 				return err
+			}
+			// Use the same local verification as `vapour verify` before any
+			// network call. The API independently verifies the signed bytes.
+			att, err := zipsign.Parse(attestation)
+			if err != nil {
+				return fmt.Errorf("cannot upload an unverified build: %w", err)
+			}
+			if err := zipsign.Verify(zipPath, att); err != nil {
+				return fmt.Errorf("cannot upload an unverified build: %w", err)
 			}
 			printBundle(out, bundle)
 			meta, err := publishMetadata(m, dir)
