@@ -31,6 +31,7 @@ type Runtime struct {
 	MemoryMB *int   `toml:"memory_mb,omitempty"`
 	COEP     string `toml:"coep,omitempty"`
 	Entry    string `toml:"entry,omitempty"`
+	OnQuit   string `toml:"on_quit,omitempty"`
 }
 
 type Mobile struct {
@@ -72,12 +73,15 @@ type Build struct {
 	Dir   string `toml:"dir"`
 	Cover string `toml:"cover,omitempty"`
 	// PointerLock controls the mouse-capture fix added to index.html when publishing a folder:
-	// "auto" (the default) adds it, "off" leaves index.html as exported.
+	// "auto" (default), "pause" (also sends Escape when browser drops lock), or "off".
 	PointerLock string `toml:"pointer_lock,omitempty"`
 }
 
 // PointerLockEnabled reports whether publish should add the pointer-lock script.
 func (b Build) PointerLockEnabled() bool { return b.PointerLock != "off" }
+
+// PointerLockPause reports whether the browser lock-loss pause behavior is enabled.
+func (b Build) PointerLockPause() bool { return b.PointerLock == "pause" }
 
 var versionRe = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+_-]*$`)
 
@@ -132,9 +136,9 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("%s: %w", File, err)
 	}
 	switch m.Build.PointerLock {
-	case "", "auto", "off":
+	case "", "auto", "off", "pause":
 	default:
-		return fmt.Errorf("%s: build.pointer_lock must be \"auto\" or \"off\", not %q", File, m.Build.PointerLock)
+		return fmt.Errorf("%s: build.pointer_lock must be \"auto\", \"pause\" or \"off\", not %q", File, m.Build.PointerLock)
 	}
 	if m.Runtime.COEP != "" && m.Runtime.COEP != "require-corp" && m.Runtime.COEP != "credentialless" {
 		return fmt.Errorf("%s: runtime.coep must be require-corp or credentialless", File)
@@ -144,6 +148,9 @@ func (m *Manifest) Validate() error {
 	}
 	if m.Runtime.MemoryMB != nil && *m.Runtime.MemoryMB <= 0 {
 		return fmt.Errorf("%s: runtime.memory_mb must be > 0", File)
+	}
+	if onQuit := strings.TrimSpace(m.Runtime.OnQuit); onQuit != "" && !validOnQuit(onQuit) {
+		return fmt.Errorf("%s: runtime.on_quit must be one of store, home, reload, stay", File)
 	}
 	orientation := m.Mobile.Orientation
 	if orientation == "" {
@@ -159,6 +166,15 @@ func (m *Manifest) Validate() error {
 		return fmt.Errorf("%s: mobile.max_dpr must be > 0", File)
 	}
 	return nil
+}
+
+func validOnQuit(value string) bool {
+	switch value {
+	case "store", "home", "reload", "stay":
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *Manifest) MobileOrientation() string {

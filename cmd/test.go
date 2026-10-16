@@ -62,6 +62,7 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 				Telemetry:         telemetry,
 				Player:            playerMode,
 				Mobile:            mobilePreview,
+				OnQuit:            m.Runtime.OnQuit,
 				MobileOrientation: mobileOrientation,
 				MobileRenderScale: mobileRenderScale,
 				MobileMaxDPR:      mobileMaxDPR,

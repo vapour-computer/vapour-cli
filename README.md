@@ -100,7 +100,10 @@ version = "0.1.0"
 
 [build]
 dir = "build/web"   # web export folder, or a .zip file
-pointer_lock = "auto"  # auto (default) | off, see below
+pointer_lock = "auto"  # auto (default) | pause | off, see below
+
+[runtime]
+on_quit = "store"      # store (default) | home | reload | stay
 
 [store]
 page = "store/page.json"       # JSON template: details, media files, layout
@@ -145,6 +148,9 @@ cursor stays visible and stops at the screen edge, which blocks mouse-look. When
 folder, `vapour publish` adds a small script to the root `index.html` inside the upload that repeats
 the request on the player's first click and gives the cursor back when the game releases it. Your
 files on disk are not changed. It wraps the standard browser API, so it works for any engine.
+
+Set `pointer_lock = "pause"` to also send Escape to the game when the browser drops lock
+(Esc/tab switch), so games with pause menus can open them.
 
 Set `pointer_lock = "off"` if your export already handles this or you want `index.html` untouched.
 A prebuilt `.zip` is uploaded as is, so it is never modified.
