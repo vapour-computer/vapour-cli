@@ -76,7 +76,8 @@ func TestUnityChecks(t *testing.T) {
 
 func TestBevyChecks(t *testing.T) {
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, "build/web/index.html"), `<link data-trunk rel="rust" data-cargo-profile="dist" />`)
+	write(t, filepath.Join(dir, "index.html"), `<link data-trunk rel="rust" data-cargo-profile="dist" />`)
+	write(t, filepath.Join(dir, "build/web/index.html"), `<!doctype html><script src="app.js"></script>`)
 	write(t, filepath.Join(dir, "Cargo.toml"), `
 [profile.dist]
 opt-level = "s"
@@ -84,6 +85,9 @@ codegen-units = 8
 `)
 	m := &project.Manifest{Project: project.Project{Engine: "bevy"}, Build: project.Build{Dir: "build/web"}}
 	findings := Check(dir, m, "")
+	if !Contains(findings, "profile `dist`") {
+		t.Fatal("expected profile from source index.html")
+	}
 	if !Contains(findings, "opt-level") {
 		t.Fatal("expected opt-level info")
 	}

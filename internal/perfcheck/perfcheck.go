@@ -209,7 +209,10 @@ func checkUnity(entries []buildEntry) []Finding {
 func checkBevy(gameDir string, entries []buildEntry) []Finding {
 	findings := make([]Finding, 0)
 	profileName := "release"
-	index := readBuildText(entries, "index.html", 2<<20)
+	index := safeRead(filepath.Join(gameDir, "index.html"))
+	if index == "" {
+		index = readBuildText(entries, "index.html", 2<<20)
+	}
 	if m := regexp.MustCompile(`data-cargo-profile\s*=\s*"([^"]+)"`).FindStringSubmatch(index); len(m) == 2 {
 		profileName = strings.TrimSpace(m[1])
 	}
