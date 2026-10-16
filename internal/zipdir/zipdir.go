@@ -63,6 +63,8 @@ type Options struct {
 	// PointerLock adds the pointer-lock script to the root index.html inside the zip.
 	// Files on disk are never modified.
 	PointerLock bool
+	// PointerLockPause sends Escape to the game when the browser drops pointer lock.
+	PointerLockPause bool
 	// PointerLockEntry selects which HTML file gets the pointer-lock script.
 	// Empty means index.html.
 	PointerLockEntry string
@@ -139,7 +141,7 @@ func ZipWith(dir string, w io.Writer, opts Options) (int, error) {
 			if err != nil {
 				return err
 			}
-			if _, err := fw.Write(InjectPointerLock(raw)); err != nil {
+			if _, err := fw.Write(InjectPointerLock(raw, opts.PointerLockPause)); err != nil {
 				return err
 			}
 			n++

@@ -24,7 +24,7 @@ func TestManifestRoundTripAndValidate(t *testing.T) {
 	m := &Manifest{
 		Project: Project{ID: "g1", Title: "T", Slug: "t", Engine: "godot", Version: "0.1.0"},
 		Build:   Build{Dir: "build/web", Command: "custom", Args: []string{"exporter", "--web"}, Boot: []string{"*.html"}, SplitWarnMiB: 1024},
-		Runtime: Runtime{Threads: true, WebGPU: false, COEP: "require-corp", Entry: "index.html"},
+		Runtime: Runtime{Threads: true, WebGPU: false, COEP: "require-corp", Entry: "index.html", OnQuit: "store"},
 		Mobile:  Mobile{Orientation: "landscape", RenderScale: &renderScale, MaxDPR: &maxDPR},
 	}
 	if err := m.Save(dir); err != nil {
@@ -82,9 +82,29 @@ func TestPointerLockSetting(t *testing.T) {
 	if m.Build.PointerLockEnabled() || m.Validate() != nil {
 		t.Error("off should disable and validate")
 	}
+	m.Build.PointerLock = "pause"
+	if !m.Build.PointerLockEnabled() || !m.Build.PointerLockPause() || m.Validate() != nil {
+		t.Error("pause should enable lock, enable pause behavior, and validate")
+	}
 	m.Build.PointerLock = "sometimes"
 	if m.Validate() == nil {
 		t.Error("unknown value accepted")
+	}
+}
+
+func TestOnQuitValidation(t *testing.T) {
+	m := &Manifest{Project: Project{Title: "g", Engine: "godot", Version: "0.1.0"}, Build: Build{Dir: "b"}}
+	for _, ok := range []string{"", "store", "home", "reload", "stay"} {
+		m.Runtime.OnQuit = ok
+		if err := m.Validate(); err != nil {
+			t.Fatalf("on_quit=%q should validate: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"http://example.com", "https://example.com", "javascript:alert(1)", "/games/x", "ftp://x", "bad"} {
+		m.Runtime.OnQuit = bad
+		if err := m.Validate(); err == nil {
+			t.Fatalf("on_quit=%q should fail", bad)
+		}
 	}
 }
 

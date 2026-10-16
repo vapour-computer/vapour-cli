@@ -8,28 +8,34 @@ import (
 // PointerLockMarker identifies the injected script so publishing twice never adds it twice.
 const PointerLockMarker = `data-vapour="pointer-lock"`
 
-// pointerLockScript makes mouse-look work for games that capture the mouse at startup.
-//
-// Browsers only grant pointer lock after a user click, so a request made while the game loads is
-// rejected and the cursor stays visible. The script remembers that the game asked for the lock and
-// repeats the request on the next click. It forgets the request when the game releases the lock,
-// so menus keep a normal cursor. It wraps the standard browser API, so it works for any engine.
-const pointerLockScript = `<script ` + PointerLockMarker + `>(function(){var want=false,target=null,P=Element.prototype,rl=P.requestPointerLock,ex=Document.prototype.exitPointerLock;` +
-	`function quiet(r){if(r&&r.catch)r.catch(function(){});return r;}` +
-	`P.requestPointerLock=function(){want=true;target=this;return quiet(rl.apply(this,arguments));};` +
-	`Document.prototype.exitPointerLock=function(){want=false;target=null;return ex.apply(this,arguments);};` +
-	`addEventListener('pointerdown',function(){if(want&&!document.pointerLockElement&&target&&target.isConnected)quiet(rl.call(target));},true);})();</script>`
+func pointerLockScript(pauseOnLoss bool) string {
+	pause := "false"
+	if pauseOnLoss {
+		pause = "true"
+	}
+	return `<script ` + PointerLockMarker + `>(function(){if(window.__vapourPointerLock)return;window.__vapourPointerLock=1;var P=Element.prototype,D=Document.prototype,rl=P.requestPointerLock,ex=D.exitPointerLock;var want=false,target=null,overlay=null,ignoreUntil=0,spike=200,pauseOnLoss=` + pause + `;` +
+		`function keyEscape(t){var dst=t&&t.isConnected?t:document;try{var i={key:'Escape',code:'Escape',keyCode:27,which:27,bubbles:true,cancelable:true};var kd=new KeyboardEvent('keydown',i),ku=new KeyboardEvent('keyup',i);try{Object.defineProperty(kd,'keyCode',{get:function(){return 27;}});Object.defineProperty(kd,'which',{get:function(){return 27;}});Object.defineProperty(ku,'keyCode',{get:function(){return 27;}});Object.defineProperty(ku,'which',{get:function(){return 27;}});}catch(_){}dst.dispatchEvent(kd);dst.dispatchEvent(ku);}catch(_){}}` +
+		`function swallow(e){e.preventDefault();e.stopPropagation();if(e.stopImmediatePropagation)e.stopImmediatePropagation();}` +
+		`function ensure(){if(overlay)return overlay;overlay=document.createElement('button');overlay.type='button';overlay.setAttribute('aria-label','Click to resume');overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;display:none;border:0;background:rgba(8,12,20,.55);color:#fff;font:600 18px/1.2 system-ui,sans-serif;cursor:pointer;';overlay.innerHTML='<span style="display:inline-block;padding:10px 14px;border-radius:10px;background:#111827;border:1px solid rgba(255,255,255,.25)">Click to play</span>';overlay.addEventListener('pointerdown',function(e){swallow(e);if(want&&target&&target.isConnected)request(target);},true);overlay.addEventListener('mousedown',swallow,true);overlay.addEventListener('mouseup',swallow,true);overlay.addEventListener('click',swallow,true);document.documentElement.appendChild(overlay);return overlay;}` +
+		`function show(msg){var o=ensure();o.firstChild.textContent=msg||'Click to play';o.style.display='block';}` +
+		`function hide(){if(overlay)overlay.style.display='none';}` +
+		`function request(el){if(!el||!el.isConnected)return;var res;try{res=rl.call(el,{unadjustedMovement:true});}catch(_){try{res=rl.call(el);}catch(__){show('Click to play');return;}}if(res&&typeof res.catch==='function'){res.catch(function(){try{rl.call(el);}catch(_){show('Click to play');}});}setTimeout(function(){if(want&&document.pointerLockElement!==el)show('Click to play');},80);}` +
+		`P.requestPointerLock=function(){want=true;target=this;hide();request(this);};` +
+		`D.exitPointerLock=function(){want=false;target=null;hide();return ex.apply(this,arguments);};` +
+		`document.addEventListener('pointerlockchange',function(){var locked=target&&document.pointerLockElement===target;if(locked){ignoreUntil=performance.now()+20;hide();return;}if(want&&target&&target.isConnected){show('Click to resume');if(pauseOnLoss)keyEscape(target);}},true);` +
+		`addEventListener('mousemove',function(e){if(!target||document.pointerLockElement!==target)return;if(performance.now()<ignoreUntil){swallow(e);return;}if(Math.abs(e.movementX)>spike||Math.abs(e.movementY)>spike)swallow(e);},true);})();</script>`
+}
 
 var headClose = regexp.MustCompile(`(?i)</head\s*>`)
 var headOpen = regexp.MustCompile(`(?i)<head[^>]*>`)
 
 // InjectPointerLock returns html with the pointer-lock script added to <head>.
 // It returns html unchanged if the script is already present.
-func InjectPointerLock(html []byte) []byte {
+func InjectPointerLock(html []byte, pauseOnLoss bool) []byte {
 	if bytes.Contains(html, []byte(PointerLockMarker)) {
 		return html
 	}
-	script := []byte(pointerLockScript)
+	script := []byte(pointerLockScript(pauseOnLoss))
 	// Put it first in <head> so the wrapper is installed before any game script runs.
 	if loc := headOpen.FindIndex(html); loc != nil {
 		return splice(html, loc[1], script)

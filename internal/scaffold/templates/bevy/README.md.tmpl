@@ -28,6 +28,9 @@ wasm-bindgen --target web --out-dir build/web --out-name game target/wasm32-unkn
 
 The template enables Bevy `webgl2`, includes wasm-js getrandom config, and a wasm-optimized release profile.
 
+When your game exits (`AppExit`) on web, the template calls `window.vapour.quit()` (if present) so the Vapour
+player can return to store/home/reload/stay according to `[runtime].on_quit`.
+
 ## Publish to Vapour
 
 1. `vapour publish`

@@ -110,6 +110,7 @@ func TestPublishMetadataIncludesControllerAndRotateMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := &project.Manifest{}
+	m.Runtime.OnQuit = "store"
 	m.Mobile.Orientation = "landscape"
 	m.Mobile.RotateMessageFile = "rotate.html"
 	m.Controller = project.Controller{Mode: "action-map", Controls: []project.Control{{ID: "a", Type: "button", X: .8, Y: .7, W: .1, H: .1, Action: "fire"}}}
@@ -118,6 +119,10 @@ func TestPublishMetadataIncludesControllerAndRotateMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	mobile := meta["mobile"].(map[string]any)
+	runtime := meta["runtime"].(map[string]any)
+	if runtime["on_quit"] != "store" {
+		t.Fatalf("runtime = %v", runtime)
+	}
 	if mobile["rotate_message"] != "<h1>Turn it</h1>" || mobile["orientation"] != "landscape" {
 		t.Fatalf("mobile = %v", mobile)
 	}

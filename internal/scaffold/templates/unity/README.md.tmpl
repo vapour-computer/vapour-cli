@@ -11,6 +11,9 @@ A Unity game starter for [Vapour](https://vapour.ink).
 
 1. In Unity: **File → Build Profiles → Web**, build into `build/web/`. Choose a gzip/brotli-free build (Decompression Fallback on) or keep the default; Vapour serves what you upload.
 
+For quit handling on WebGL, call `Vapour.VapourBridge.Quit()` instead of `Application.Quit()`. It calls
+`window.vapour.quit()` when running in the Vapour player, and falls back to `Application.Quit()` elsewhere.
+
 ## Publish to Vapour
 
 1. `vapour publish`

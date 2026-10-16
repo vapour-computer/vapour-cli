@@ -15,26 +15,28 @@ func TestInjectPointerLock(t *testing.T) {
 		"bare":    "just text",
 	}
 	for name, in := range cases {
-		out := InjectPointerLock([]byte(in))
+		out := InjectPointerLock([]byte(in), false)
 		if bytes.Count(out, []byte(PointerLockMarker)) != 1 {
 			t.Errorf("%s: want one script, got %q", name, out)
 		}
 		if !strings.Contains(string(out), "requestPointerLock") {
 			t.Errorf("%s: script body missing", name)
 		}
-		if again := InjectPointerLock(out); !bytes.Equal(again, out) {
+		if again := InjectPointerLock(out, false); !bytes.Equal(again, out) {
 			t.Errorf("%s: second injection changed the page", name)
 		}
 	}
-	got := string(InjectPointerLock([]byte(cases["head"])))
+	got := string(InjectPointerLock([]byte(cases["head"]), true))
 	if !strings.HasPrefix(got, "<html><HEAD lang=x><script") {
 		t.Errorf("script should be first in <head>: %q", got)
 	}
 	if !strings.Contains(got, "target=this") {
 		t.Errorf("script should remember request target: %q", got)
 	}
-	if strings.Contains(got, "querySelector('canvas')") {
-		t.Errorf("script should re-request lock on saved target, not first canvas: %q", got)
+	for _, want := range []string{"Click to play", "Click to resume", "stopImmediatePropagation", "movementX", "unadjustedMovement", "pauseOnLoss=true"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("script missing %q: %q", want, got)
+		}
 	}
 }
 
@@ -67,6 +69,9 @@ func TestZipWithPointerLock(t *testing.T) {
 	if !strings.Contains(on["index.html"], PointerLockMarker) {
 		t.Error("root index.html not injected")
 	}
+	if !strings.Contains(on["index.html"], "pauseOnLoss=false") {
+		t.Error("default pointer lock mode should not pause on lock loss")
+	}
 	if strings.Contains(on["sub/index.html"], PointerLockMarker) {
 		t.Error("nested index.html must not be touched")
 	}
@@ -76,6 +81,10 @@ func TestZipWithPointerLock(t *testing.T) {
 	off := read(Options{})
 	if strings.Contains(off["index.html"], PointerLockMarker) {
 		t.Error("injected although disabled")
+	}
+	pause := read(Options{PointerLock: true, PointerLockPause: true})
+	if !strings.Contains(pause["index.html"], "pauseOnLoss=true") {
+		t.Error("pause mode should be injected")
 	}
 	entry := read(Options{PointerLock: true, PointerLockEntry: "sub/index.html"})
 	if strings.Contains(entry["index.html"], PointerLockMarker) {
