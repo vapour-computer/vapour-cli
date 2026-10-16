@@ -64,6 +64,17 @@ func TestRejectSymlink(t *testing.T) {
 	}
 }
 
+func TestUploadURLRejectsRemoteToLoopback(t *testing.T) {
+	for _, target := range []string{"http://127.0.0.1:8080/upload", "https://localhost/upload"} {
+		if err := validateUploadURL("https://api.vapour.ink", target); err == nil {
+			t.Fatalf("remote API may not send chunks to %s", target)
+		}
+	}
+	if err := validateUploadURL("http://127.0.0.1:8080", "http://127.0.0.1:9199/upload"); err != nil {
+		t.Fatalf("local API may use its local upload endpoint: %v", err)
+	}
+}
+
 func TestRepairCorruptSpool(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
 	os.WriteFile(filepath.Join(root, "index.html"), []byte("original"), 0600)

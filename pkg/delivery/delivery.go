@@ -317,6 +317,10 @@ func validateUploadURL(apiBase, raw string) error {
 	}
 	h := strings.ToLower(u.Hostname())
 	if h == "localhost" || h == "127.0.0.1" || h == "::1" {
+		b, err := url.Parse(apiBase)
+		if err != nil || !strings.EqualFold(h, b.Hostname()) || u.Scheme != b.Scheme {
+			return fmt.Errorf("loopback upload URL requires a matching local API base")
+		}
 		return nil
 	}
 	if ip := net.ParseIP(h); ip != nil {
