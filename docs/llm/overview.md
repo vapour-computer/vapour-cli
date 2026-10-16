@@ -26,11 +26,18 @@ For assistant context in-terminal: `vapour llm` (fetches docs `llm.txt`, caches 
 
 ## Resolution rules (`cmd/root.go`, `internal/config`)
 - API base: `--api` flag > `VAPOUR_API` > `api` in saved credentials > `https://api.vapour.ink`.
+- API safety: HTTPS is required. Plain HTTP is allowed only for localhost with `--allow-insecure-http`
+  (or `VAPOUR_ALLOW_INSECURE_HTTP=1`).
+- Token safety: non-default API hosts are blocked unless `--allow-custom-api`
+  (or `VAPOUR_ALLOW_CUSTOM_API=1`) is set.
 - Token: `VAPOUR_TOKEN` (for CI) > saved credentials. Commands needing auth fail with "not logged in".
 - Credentials file: `$XDG_CONFIG_HOME/vapour/credentials` or `~/.config/vapour/credentials`.
 
 ## Env vars
-`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `VAPOUR_NO_UPDATE_CHECK`, `VAPOUR_RELEASES_URL` (release endpoint override), `VAPOUR_LLM_URL` (`vapour llm` source override), `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `GODOT`, `UNITY_EDITOR` (build).
+`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `VAPOUR_NO_UPDATE_CHECK`,
+`VAPOUR_RELEASES_URL` (release endpoint override), `VAPOUR_LLM_URL` (`vapour llm` source override),
+`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `GODOT`, `UNITY_EDITOR` (build), `VAPOUR_ALLOW_CUSTOM_API`,
+`VAPOUR_ALLOW_INSECURE_HTTP`, `VAPOUR_ALLOW_UNTRUSTED_RELEASES`.
 
 ## Conventions
 - Errors: returned from `RunE`; `cmd.ErrorMessage` prints `error: ...` plus the docs URL

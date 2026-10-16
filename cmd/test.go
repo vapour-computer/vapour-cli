@@ -56,7 +56,11 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 				return err
 			}
 			emitPerfHints(out, dir, m, noPerfHints)
-			fsys, closeFS, err := openBuild(filepath.Join(dir, m.Build.Dir))
+			buildPath, err := project.ResolvePathInside(dir, m.Build.Dir, "build.dir")
+			if err != nil {
+				return err
+			}
+			fsys, closeFS, err := openBuild(buildPath)
 			if err != nil {
 				return err
 			}

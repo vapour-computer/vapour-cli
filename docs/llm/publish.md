@@ -9,7 +9,8 @@ project if no id → push store page → upload build. Store goes first so rejec
 
 Build packing (`zipdir`): a folder must contain top-level `index.html` and no native binaries
 (`.exe .dll .so .dylib .app .msi`); it is zipped (skips `.git`, `.DS_Store`, `Thumbs.db`) to a temp file. A `.zip` is
-uploaded as is. Limit 512 MiB. Uploaded as `build.zip`.
+uploaded as is. `build.dir` is resolved through symlinks and must stay inside the game folder. Limit 512 MiB.
+Uploaded as `build.zip`.
 
 Unless suppressed by `--no-perf-hints`, command output also includes warnings from `internal/perfcheck`.
 
@@ -17,4 +18,4 @@ A version can be published once: API error `version_exists` becomes "pass a new 
 Success prints the game URL.
 
 `--experimental-chunks`: opt-in content-addressed chunk protocol (`pkg/delivery/README.md`); the deployed API doesn't
-implement it yet. Default remains ZIP.
+implement it yet. Default remains ZIP. Upload chunk URLs must be HTTPS and on an allowlisted public host.

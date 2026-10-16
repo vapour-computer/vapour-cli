@@ -18,6 +18,7 @@ var templateRepos = map[string]string{
 func newTemplate() *cobra.Command {
 	var org string
 	var offline bool
+	var allowUntrustedTemplate bool
 	cmd := &cobra.Command{
 		Use:   "template <engine> <name>",
 		Short: "Create a project from an official template repo",
@@ -30,11 +31,12 @@ func newTemplate() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return createProject(cmd, title, engine, "desktop", from, offline)
+			return createProject(cmd, title, engine, "desktop", from, offline, allowUntrustedTemplate)
 		},
 	}
 	cmd.Flags().StringVar(&org, "org", defaultTemplateOrg, "GitHub org/user that owns template repos")
 	cmd.Flags().BoolVar(&offline, "offline", false, "scaffold only; the project is registered on first publish")
+	cmd.Flags().BoolVar(&allowUntrustedTemplate, "allow-untrusted-template", false, "allow cloning templates outside trusted sources")
 	return cmd
 }
 

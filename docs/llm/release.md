@@ -21,7 +21,10 @@
   and `--version` check GitHub latest release at most once per 24h (cache file in user cache dir), timeout 2s,
   never fail command, and print one stderr line when newer release exists.
 - Install: `curl -fsSL https://raw.githubusercontent.com/vapour-computer/vapour-cli/main/install.sh | sh`. Detects
-  OS/arch, finds latest tag via the `/releases/latest` redirect, verifies SHA-256, installs to `/usr/local/bin` or
-  `~/.local/bin`. Env: `VAPOUR_VERSION`, `VAPOUR_INSTALL_DIR`. Windows is not supported by the script.
+  OS/arch, finds latest tag via the `/releases/latest` redirect (must stay on github.com), verifies SHA-256,
+  validates archive contents, installs to `/usr/local/bin` or `~/.local/bin`. Env: `VAPOUR_VERSION`,
+  `VAPOUR_INSTALL_DIR`. Windows is not supported by the script.
+- `vapour update` only trusts official GitHub release API/asset hosts by default. Overriding
+  `VAPOUR_RELEASES_URL` requires `VAPOUR_ALLOW_UNTRUSTED_RELEASES=1`.
 - `main` is protected (`.github/rulesets/protect-main.json`: PR required). `.githooks/pre-push` blocks direct pushes
   (`git config core.hooksPath .githooks`; override once with `ALLOW_MAIN_PUSH=1`).

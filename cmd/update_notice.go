@@ -78,8 +78,12 @@ func latestReleaseVersion(ctx context.Context) (string, error) {
 func fetchLatestReleaseVersion(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, updateNoticeTimeout)
 	defer cancel()
+	base := strings.TrimRight(os.Getenv("VAPOUR_RELEASES_URL"), "/")
+	if base == "" {
+		base = releasesAPI
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releasesURL()+"/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/latest", nil)
 	if err != nil {
 		return "", err
 	}
@@ -91,7 +95,7 @@ func fetchLatestReleaseVersion(ctx context.Context) (string, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET %s/latest: %s", releasesURL(), res.Status)
+		return "", fmt.Errorf("GET %s/latest: %s", base, res.Status)
 	}
 
 	var rel releaseInfo

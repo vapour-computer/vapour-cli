@@ -43,10 +43,19 @@ esac
 
 tag="${VAPOUR_VERSION:-}"
 if [ -z "$tag" ]; then
-  tag="$(final_url "https://github.com/$REPO/releases/latest" | sed 's|.*/tag/||')"
+  latest_url="$(final_url "https://github.com/$REPO/releases/latest")"
+  case "$latest_url" in
+    https://github.com/$REPO/releases/tag/*) ;;
+    *) err "unexpected release redirect: $latest_url" ;;
+  esac
+  tag="$(printf '%s' "$latest_url" | sed 's|.*/tag/||')"
   case "$tag" in v*) ;; *) err "could not determine latest release" ;; esac
 fi
 case "$tag" in v*) ;; *) tag="v$tag" ;; esac
+case "$tag" in
+  v[0-9A-Za-z._-]*) ;;
+  *) err "invalid version tag: $tag" ;;
+esac
 version="${tag#v}"
 
 archive="${BIN}_${version}_${os}_${arch}.tar.gz"
@@ -70,6 +79,7 @@ else
 fi
 [ "$want" = "$got" ] || err "checksum mismatch for $archive"
 
+tar -tzf "$tmp/$archive" "$BIN" >/dev/null 2>&1 || err "archive does not contain expected $BIN payload"
 tar -xzf "$tmp/$archive" -C "$tmp" "$BIN" || err "failed to extract $archive"
 
 dir="${VAPOUR_INSTALL_DIR:-}"

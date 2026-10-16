@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,23 +16,24 @@ import (
 
 func newCreate() *cobra.Command {
 	var engine, from, platform string
-	var offline bool
+	var offline, allowUntrustedTemplate bool
 	cmd := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create a game project (scaffold, or clone a sample with --from)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return createProject(cmd, strings.TrimSpace(args[0]), engine, platform, from, offline)
+			return createProject(cmd, strings.TrimSpace(args[0]), engine, platform, from, offline, allowUntrustedTemplate)
 		},
 	}
 	cmd.Flags().StringVar(&engine, "engine", "godot", "godot | unity | bevy | other")
 	cmd.Flags().StringVar(&platform, "platform", "desktop", "desktop | native-mobile | port")
 	cmd.Flags().StringVar(&from, "from", "", "git URL of a sample game to clone into the new folder")
+	cmd.Flags().BoolVar(&allowUntrustedTemplate, "allow-untrusted-template", false, "allow cloning templates outside trusted sources")
 	cmd.Flags().BoolVar(&offline, "offline", false, "scaffold only; the project is registered on first publish")
 	return cmd
 }
 
-func createProject(cmd *cobra.Command, title, engine, platform, from string, offline bool) error {
+func createProject(cmd *cobra.Command, title, engine, platform, from string, offline bool, allowUntrustedTemplate bool) error {
 	if title == "" {
 		return fmt.Errorf("name is required")
 	}
@@ -66,7 +68,7 @@ func createProject(cmd *cobra.Command, title, engine, platform, from string, off
 
 	data := scaffold.Data{Title: title, Slug: m.Project.Slug, Engine: engine}
 	if from != "" {
-		if err := clone(from, dir); err != nil {
+		if err := cloneWithTrust(from, dir, allowUntrustedTemplate); err != nil {
 			return err
 		}
 		if err := scaffold.WriteStore(dir, data); err != nil {
@@ -105,8 +107,15 @@ func validEngine(e string) bool {
 
 // clone shallow-clones url into dir and drops the .git folder so the game starts with a fresh history.
 func clone(url, dir string) error {
+	return cloneWithTrust(url, dir, false)
+}
+
+func cloneWithTrust(url, dir string, allowUntrusted bool) error {
 	if strings.HasPrefix(url, "-") {
 		return fmt.Errorf("invalid git URL %q", url)
+	}
+	if !allowUntrusted && !trustedTemplateURL(url) {
+		return fmt.Errorf("untrusted template source %q (pass --allow-untrusted-template to override)", url)
 	}
 	if _, err := exec.LookPath("git"); err != nil {
 		return fmt.Errorf("git is required to clone a template or sample")
@@ -117,4 +126,21 @@ func clone(url, dir string) error {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 	return os.RemoveAll(filepath.Join(dir, ".git"))
+}
+
+func trustedTemplateURL(raw string) bool {
+	if strings.HasPrefix(raw, "./") || strings.HasPrefix(raw, "../") || strings.HasPrefix(raw, "/") {
+		return true
+	}
+	if strings.HasPrefix(raw, "git@github.com:vapour-computer/") {
+		return true
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "https" || !strings.EqualFold(u.Host, "github.com") {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimPrefix(u.Path, "/"), "vapour-computer/")
 }

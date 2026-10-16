@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,12 +22,15 @@ import (
 
 const releasesAPI = "https://api.github.com/repos/vapour-computer/vapour-cli/releases"
 
-// releasesURL can be overridden (tests, mirrors) with VAPOUR_RELEASES_URL.
-func releasesURL() string {
+// releasesURL can be overridden only when explicitly allowed.
+func releasesURL() (string, error) {
 	if u := os.Getenv("VAPOUR_RELEASES_URL"); u != "" {
-		return strings.TrimRight(u, "/")
+		if strings.TrimSpace(u) != releasesAPI && os.Getenv("VAPOUR_ALLOW_UNTRUSTED_RELEASES") != "1" {
+			return "", fmt.Errorf("VAPOUR_RELEASES_URL is blocked unless VAPOUR_ALLOW_UNTRUSTED_RELEASES=1")
+		}
+		return strings.TrimRight(u, "/"), nil
 	}
-	return releasesAPI
+	return releasesAPI, nil
 }
 
 type releaseInfo struct {
@@ -97,12 +102,16 @@ func httpGet(cmd *cobra.Command, url string) (*http.Response, error) {
 }
 
 func fetchRelease(cmd *cobra.Command, version string) (*releaseInfo, error) {
-	url := releasesURL() + "/latest"
+	base, err := releasesURL()
+	if err != nil {
+		return nil, err
+	}
+	url := base + "/latest"
 	if version != "" {
 		if !strings.HasPrefix(version, "v") {
 			version = "v" + version
 		}
-		url = releasesURL() + "/tags/" + version
+		url = base + "/tags/" + version
 	}
 	res, err := httpGet(cmd, url)
 	if err != nil {
@@ -139,6 +148,12 @@ func installReleaseForPlatform(goos, goarch string, cmd *cobra.Command, rel *rel
 	}
 	if archiveURL == "" || sumsURL == "" {
 		return fmt.Errorf("release %s has no build for %s/%s", rel.Tag, goos, goarch)
+	}
+	if err := validateAssetURL(archiveURL); err != nil {
+		return err
+	}
+	if err := validateAssetURL(sumsURL); err != nil {
+		return err
 	}
 
 	sums, err := httpGet(cmd, sumsURL)
@@ -194,6 +209,27 @@ func installReleaseForPlatform(goos, goarch string, cmd *cobra.Command, rel *rel
 		return err
 	}
 	return os.Rename(tmp.Name(), self)
+}
+
+func validateAssetURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("release asset URL is invalid: %q", raw)
+	}
+	host := strings.ToLower(u.Hostname())
+	if u.Scheme != "https" {
+		if u.Scheme != "http" || (host != "localhost" && host != "127.0.0.1" && host != "::1") {
+			return fmt.Errorf("release asset URL is invalid: %q", raw)
+		}
+		return nil
+	}
+	if host != "github.com" && host != "objects.githubusercontent.com" && host != "github-releases.githubusercontent.com" {
+		return fmt.Errorf("release asset host %q is not trusted", u.Host)
+	}
+	if ip := net.ParseIP(host); ip != nil && !ip.IsGlobalUnicast() {
+		return fmt.Errorf("release asset host %q is not public", u.Host)
+	}
+	return nil
 }
 
 // extractBinary copies the "vapour" file out of a .tar.gz stream into dst.

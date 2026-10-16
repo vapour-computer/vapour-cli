@@ -143,7 +143,11 @@ func Load(gameDir string, m *project.Manifest) (*Bundle, error) {
 	b := &Bundle{Metadata: map[string]any{}}
 
 	if m.Store.Content != "" {
-		md, err := readText(filepath.Join(gameDir, m.Store.Content), MaxDescription, "store content")
+		contentPath, err := project.ResolvePathInside(gameDir, m.Store.Content, "store content path")
+		if err != nil {
+			return nil, err
+		}
+		md, err := readText(contentPath, MaxDescription, "store content")
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +155,11 @@ func Load(gameDir string, m *project.Manifest) (*Bundle, error) {
 		defer func() { b.Warnings = append(b.Warnings, anchorWarnings(b, md)...) }()
 	}
 	if m.Store.Notes != "" {
-		n, err := readText(filepath.Join(gameDir, m.Store.Notes), MaxNotes, "release notes")
+		notesPath, err := project.ResolvePathInside(gameDir, m.Store.Notes, "release notes path")
+		if err != nil {
+			return nil, err
+		}
+		n, err := readText(notesPath, MaxNotes, "release notes")
 		if err != nil {
 			return nil, err
 		}
@@ -162,14 +170,21 @@ func Load(gameDir string, m *project.Manifest) (*Bundle, error) {
 
 	if m.Store.Page == "" {
 		if legacyCover != "" {
-			if err := addImage(b, gameDir, "cover", legacyCover, media.Cover); err != nil {
+			coverPath, err := project.ResolvePathInside(gameDir, legacyCover, "build cover")
+			if err != nil {
+				return nil, err
+			}
+			if err := addImage(b, "", "cover", coverPath, media.Cover); err != nil {
 				return nil, err
 			}
 		}
 		return b, nil
 	}
 
-	pagePath := filepath.Join(gameDir, m.Store.Page)
+	pagePath, err := project.ResolvePathInside(gameDir, m.Store.Page, "store page path")
+	if err != nil {
+		return nil, err
+	}
 	raw, err := os.ReadFile(pagePath)
 	if err != nil {
 		return nil, fmt.Errorf("store page: %w", err)
@@ -208,21 +223,33 @@ func Load(gameDir string, m *project.Manifest) (*Bundle, error) {
 
 	// Media paths are relative to the folder holding page.json.
 	base := filepath.Dir(pagePath)
-	rel := func(p string) string { return filepath.Join(base, filepath.FromSlash(p)) }
+	rel := func(p string) (string, error) { return project.ResolvePathInside(base, p, "store media path") }
 	cover := f.Media.Cover
 	if cover == "" {
 		cover = legacyCover
 		if cover != "" {
-			cover = filepath.ToSlash(mustRel(base, filepath.Join(gameDir, filepath.FromSlash(cover))))
+			legacyCoverPath, err := project.ResolvePathInside(gameDir, cover, "build cover")
+			if err != nil {
+				return nil, err
+			}
+			cover = filepath.ToSlash(mustRel(base, legacyCoverPath))
 		}
 	}
 	if f.Media.Banner != "" {
-		if err := addImage(b, "", "banner", rel(f.Media.Banner), media.Banner); err != nil {
+		p, err := rel(f.Media.Banner)
+		if err != nil {
+			return nil, err
+		}
+		if err := addImage(b, "", "banner", p, media.Banner); err != nil {
 			return nil, err
 		}
 	}
 	if cover != "" {
-		if err := addImage(b, "", "cover", rel(cover), media.Cover); err != nil {
+		p, err := rel(cover)
+		if err != nil {
+			return nil, err
+		}
+		if err := addImage(b, "", "cover", p, media.Cover); err != nil {
 			return nil, err
 		}
 	}
@@ -230,16 +257,24 @@ func Load(gameDir string, m *project.Manifest) (*Bundle, error) {
 		if s == "" {
 			continue
 		}
-		if err := addImage(b, "", "screenshot", rel(s), media.Screenshot); err != nil {
+		p, err := rel(s)
+		if err != nil {
+			return nil, err
+		}
+		if err := addImage(b, "", "screenshot", p, media.Screenshot); err != nil {
 			return nil, err
 		}
 	}
 	if f.Media.Video != "" {
-		n, err := media.CheckVideo(rel(f.Media.Video))
+		p, err := rel(f.Media.Video)
 		if err != nil {
 			return nil, err
 		}
-		b.Uploads = append(b.Uploads, Upload{Field: "video", Path: rel(f.Media.Video), Bytes: n})
+		n, err := media.CheckVideo(p)
+		if err != nil {
+			return nil, err
+		}
+		b.Uploads = append(b.Uploads, Upload{Field: "video", Path: p, Bytes: n})
 	}
 	if total := b.TotalBytes(); total > media.MaxRequestBytes-2*media.MiB {
 		return nil, fmt.Errorf("store media totals %.1f MiB; one upload must stay under %d MiB (compress the video or screenshots)",

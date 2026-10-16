@@ -8,6 +8,9 @@
 `store/template.md` (Markdown description, max 20000 chars; `## ` headings define anchors; text before the first is `intro`)
 and `store/page.json` (unknown keys are an error; schema at `store/page.schema.json`).
 
+All referenced store files and media are resolved through symlinks and must stay inside the game folder.
+Absolute paths and `..` escapes are rejected.
+
 page.json: `version` (must be 1); `game.tagline` (≤140), `game.category` (one of `storepage.Categories`:
 action adventure arcade casual horror platformer puzzle racing retro rpg shooter simulation sports strategy other),
 `game.tags` (≤5, each 1-24 chars of `[a-z0-9 -]`); `media.banner|cover|screenshots[≤8]|video` (paths relative to page.json);

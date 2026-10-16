@@ -129,6 +129,10 @@ func (m *Manifest) Validate() error {
 	if strings.TrimSpace(m.Build.Dir) == "" {
 		return fmt.Errorf("%s: build.dir is required (your web export folder or .zip)", File)
 	}
+	build := filepath.Clean(filepath.FromSlash(strings.TrimSpace(m.Build.Dir)))
+	if filepath.IsAbs(build) || build == "." || build == ".." || strings.HasPrefix(build, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%s: build.dir must be a relative path inside the game folder", File)
+	}
 	if err := validatePlatform(m.Project.Platform); err != nil {
 		return fmt.Errorf("%s: %w", File, err)
 	}
@@ -175,6 +179,33 @@ func validOnQuit(value string) bool {
 	default:
 		return false
 	}
+}
+
+// ResolvePathInside resolves rel from gameDir, follows symlinks, and ensures
+// the result stays inside gameDir.
+func ResolvePathInside(gameDir, rel, label string) (string, error) {
+	root, err := filepath.Abs(gameDir)
+	if err != nil {
+		return "", err
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	clean := filepath.Clean(filepath.FromSlash(strings.TrimSpace(rel)))
+	if clean == "." || clean == "" || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s must be a relative path inside the game folder", label)
+	}
+	p := filepath.Join(root, clean)
+	p, err = filepath.EvalSymlinks(p)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", label, err)
+	}
+	r, err := filepath.Rel(root, p)
+	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s must stay inside the game folder", label)
+	}
+	return p, nil
 }
 
 func (m *Manifest) MobileOrientation() string {

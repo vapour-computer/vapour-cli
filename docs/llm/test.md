@@ -1,6 +1,7 @@
 # `vapour test` (`cmd/test.go`, `internal/devserver`, `internal/localprofile`)
 
 Serves `build.dir` (folder or .zip read in place) on `127.0.0.1` and opens it in the browser.
+`build.dir` is resolved through symlinks and must stay inside the game folder.
 
 Flags: `--dir`, `--port` (0 = free port), `--no-telemetry` (no FPS overlay), `--no-open` (also skips profiler),
 `--no-profile`, `--profiler PATH` (else `$VAPOUR_PROFILER`, next to the vapour binary, then PATH), `--no-perf-hints`.

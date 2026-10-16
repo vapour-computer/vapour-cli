@@ -61,7 +61,10 @@ Release notes are required with --notes or --notes-file.`,
 			}
 
 			// Resolve the build: a folder is checked and zipped; a .zip is uploaded as is.
-			buildPath := filepath.Join(dir, m.Build.Dir)
+			buildPath, err := project.ResolvePathInside(dir, m.Build.Dir, "build.dir")
+			if err != nil {
+				return err
+			}
 			if chunked {
 				if err := scanFolder(out, buildPath); err != nil {
 					return err

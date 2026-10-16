@@ -11,7 +11,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -285,6 +288,9 @@ func Upload(ctx context.Context, base, game, token, cache string, m Manifest) (i
 		}()
 	}
 	for _, item := range s.Missing {
+		if err := validateUploadURL(base, item.URL); err != nil {
+			return sent, err
+		}
 		jobs <- item
 	}
 	close(jobs)
@@ -293,4 +299,43 @@ func Upload(ctx context.Context, base, game, token, cache string, m Manifest) (i
 		return sent, first
 	}
 	return sent, JSON(ctx, c, "POST", endpoint+"/"+s.ID+"/finalize", token, nil, nil)
+}
+
+func validateUploadURL(apiBase, raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("invalid upload URL")
+	}
+	if u.Scheme != "https" {
+		if u.Scheme != "http" {
+			return fmt.Errorf("invalid upload URL")
+		}
+		h := strings.ToLower(u.Hostname())
+		if h != "localhost" && h != "127.0.0.1" && h != "::1" {
+			return fmt.Errorf("upload URL must use https")
+		}
+	}
+	h := strings.ToLower(u.Hostname())
+	if h == "localhost" || h == "127.0.0.1" || h == "::1" {
+		return nil
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		a, ok := netip.AddrFromSlice(ip)
+		if !ok || a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || a.IsMulticast() {
+			return fmt.Errorf("upload URL host is not public")
+		}
+	}
+	b, err := url.Parse(apiBase)
+	if err != nil || b.Hostname() == "" {
+		return fmt.Errorf("invalid API base")
+	}
+	if strings.EqualFold(h, b.Hostname()) {
+		return nil
+	}
+	for _, suffix := range []string{".r2.cloudflarestorage.com", ".amazonaws.com", ".storage.googleapis.com", ".googleapis.com"} {
+		if strings.HasSuffix(h, suffix) {
+			return nil
+		}
+	}
+	return fmt.Errorf("upload URL host %q is not allowlisted", u.Host)
 }
