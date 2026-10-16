@@ -11,6 +11,7 @@ Flags: `--dir`, `--port` (0 = free port), `--no-telemetry` (no FPS overlay), `--
   `/__vapour/report` (same-origin only, body capped at 4 KiB); the CLI prints frames, avg fps, 1% low, worst frame.
 - Profiler (Linux only, `localprofile_linux.go`): launches a Chromium-family browser (chromium, chrome, brave, edge)
   with a throwaway `--user-data-dir`, runs `vapour-profiler dashboard --pid <browser> --tree --autostart` (dashboard
-  port 6767), and stops when the browser exits. If the profiler or a browser is missing it prints why and continues
-  with the overlay only. Other OSes use `localprofile_other.go` (unsupported stub).
+  port 6767), and stops when the browser exits. At session end, the CLI fetches `/api/report` from the local profiler
+  and saves `.vapour/test-output/report.json`, then prints that path. If the profiler or a browser is missing it prints
+  why and continues with the overlay only. Other OSes use `localprofile_other.go` (unsupported stub).
 - Nothing leaves the machine.
