@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"archive/zip"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,6 +14,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -60,6 +64,13 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 
 			telemetry := !noTelemetry
 			mobileOrientation, mobileRenderScale, mobileMaxDPR := readMobilePreviewSettings(dir)
+			reportPosted := make(chan struct{})
+			var reportOnce sync.Once
+			var bridgeMu sync.Mutex
+			var bridge *profilerBridge
+			var appendFailMu sync.Mutex
+			appendFailCount := 0
+			var appendFailLast error
 			h := devserver.Handler(devserver.Options{
 				FS:                fsys,
 				Telemetry:         telemetry,
@@ -72,6 +83,21 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 				OnReport: func(r devserver.Report) {
 					fmt.Fprintf(out, "Session: %d frames, avg %.0f fps, 1%% low %.0f fps, worst frame %.0f ms\n",
 						r.Frames, r.AvgFPS, r.Low1FPS, r.WorstMS)
+					reportOnce.Do(func() { close(reportPosted) })
+				},
+				OnRecords: func(batch devserver.RecordsBatch) {
+					bridgeMu.Lock()
+					b := bridge
+					bridgeMu.Unlock()
+					if b == nil {
+						return
+					}
+					if err := b.append(batch); err != nil {
+						appendFailMu.Lock()
+						appendFailCount++
+						appendFailLast = err
+						appendFailMu.Unlock()
+					}
 				},
 			})
 			l, err := devserver.Listen(port)
@@ -96,12 +122,27 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 			if !noOpen && !noProfile {
 				sess, err := localprofile.Start(url, localprofile.Options{ProfilerBin: profilerBin, Out: cmd.ErrOrStderr()})
 				if sess != nil {
+					if b, e := newProfilerBridge(sess.DashboardURL); e == nil {
+						bridgeMu.Lock()
+						bridge = b
+						bridgeMu.Unlock()
+					}
 					defer sess.Close()
 					profiled = true
 					go func() {
 						select {
 						case <-sess.Done():
-							time.Sleep(500 * time.Millisecond) // let the page's final report arrive
+							select {
+							case <-reportPosted:
+							case <-time.After(2 * time.Second):
+							}
+							appendFailMu.Lock()
+							count := appendFailCount
+							last := appendFailLast
+							appendFailMu.Unlock()
+							if count > 0 && last != nil {
+								fmt.Fprintf(out, "%d frame batches could not be sent to the profiler: %v\n", count, last)
+							}
 							if path, err := saveProfilerReport(dir, sess.DashboardURL); err != nil {
 								fmt.Fprintf(out, "Profiler JSON report not saved: %v\n", err)
 							} else {
@@ -205,6 +246,39 @@ func profilerReportURL(dashboardURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	u.Path = "/api/report"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+func profilerRecordsURL(dashboardURL string) (string, error) {
+	u, err := url.Parse(dashboardURL)
+	if err != nil {
+		return "", err
+	}
+	u.Path = "/api/records"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+func profilerStatusURL(dashboardURL string) (string, error) {
+	u, err := url.Parse(dashboardURL)
+	if err != nil {
+		return "", err
+	}
+	u.Path = "/api/status"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+func profilerToken(dashboardURL string) (string, error) {
+	u, err := url.Parse(dashboardURL)
+	if err != nil {
+		return "", err
+	}
 	q, err := url.ParseQuery(u.Fragment)
 	if err != nil {
 		return "", err
@@ -213,10 +287,130 @@ func profilerReportURL(dashboardURL string) (string, error) {
 	if token == "" {
 		return "", fmt.Errorf("missing dashboard token")
 	}
-	u.Path = "/api/report"
-	u.RawQuery = ""
-	u.Fragment = ""
-	return u.String(), nil
+	return token, nil
+}
+
+type profilerBridge struct {
+	recordsURL string
+	statusURL  string
+	token      string
+	client     *http.Client
+	originMS   float64
+	hasOrigin  bool
+	lastFrame  float64
+	mu         sync.Mutex
+}
+
+func newProfilerBridge(dashboardURL string) (*profilerBridge, error) {
+	recordsURL, err := profilerRecordsURL(dashboardURL)
+	if err != nil {
+		return nil, err
+	}
+	statusURL, err := profilerStatusURL(dashboardURL)
+	if err != nil {
+		return nil, err
+	}
+	token, err := profilerToken(dashboardURL)
+	if err != nil {
+		return nil, err
+	}
+	return &profilerBridge{
+		recordsURL: recordsURL,
+		statusURL:  statusURL,
+		token:      token,
+		client:     &http.Client{Timeout: 5 * time.Second},
+	}, nil
+}
+
+func nowMS() float64 {
+	return float64(time.Now().UnixNano()) / 1_000_000
+}
+
+func (p *profilerBridge) ensureOrigin() {
+	if p.hasOrigin {
+		return
+	}
+	req, err := http.NewRequest(http.MethodGet, p.statusURL, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&payload); err != nil {
+		return
+	}
+	t := 0.0
+	if metrics, ok := payload["metrics"].(map[string]any); ok {
+		if tm, ok := metrics["timeMs"].(float64); ok {
+			t = tm
+		}
+	}
+	p.originMS = nowMS() - t
+	p.hasOrigin = true
+}
+
+func (p *profilerBridge) relativeTime(epochMS, last float64) float64 {
+	t := epochMS - p.originMS
+	if t < 0 {
+		t = 0
+	}
+	if t < last {
+		t = last
+	}
+	return t
+}
+
+func (p *profilerBridge) append(batch devserver.RecordsBatch) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(batch.Frames) == 0 {
+		return nil
+	}
+	p.ensureOrigin()
+	if !p.hasOrigin {
+		p.originMS = nowMS()
+		p.hasOrigin = true
+	}
+	lines := make([]string, 0, len(batch.Frames))
+	for _, frame := range batch.Frames {
+		timeMS := p.relativeTime(frame.EpochMS, p.lastFrame)
+		p.lastFrame = timeMS
+		row, err := json.Marshal(map[string]any{
+			"type":       "frame",
+			"timeMs":     timeMS,
+			"durationMs": frame.DurationMS,
+			"spike":      frame.Spike,
+		})
+		if err != nil {
+			return err
+		}
+		lines = append(lines, string(row))
+	}
+	body := strings.Join(lines, "\n")
+	req, err := http.NewRequest(http.MethodPost, p.recordsURL, bytes.NewBufferString(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("Content-Type", "application/x-ndjson")
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("append records: %s: %s", resp.Status, string(msg))
+	}
+	return nil
 }
 
 func saveProfilerReport(projectDir, dashboardURL string) (string, error) {
@@ -224,9 +418,10 @@ func saveProfilerReport(projectDir, dashboardURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	du, _ := url.Parse(dashboardURL)
-	q, _ := url.ParseQuery(du.Fragment)
-	token := q.Get("token")
+	token, err := profilerToken(dashboardURL)
+	if err != nil {
+		return "", err
+	}
 	req, err := http.NewRequest(http.MethodGet, reportURL, nil)
 	if err != nil {
 		return "", err

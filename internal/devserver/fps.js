@@ -5,8 +5,11 @@
   "use strict";
   var MAX = 1200; // ring of recent frame times (about 20s at 60fps)
   var times = new Float32Array(MAX);
+  var recent = [];
   var n = 0, total = 0, worst = 0, sumMs = 0;
   var last = 0, winStart = 0, winFrames = 0, fps = 0;
+  var start = 0, lastFlush = 0;
+  var batchFrames = [];
 
   var box = document.createElement("div");
   box.setAttribute("data-vapour-overlay", "");
@@ -35,13 +38,40 @@
     return 1000 / (s / k);
   }
 
+  function median(values) {
+    if (!values.length) return 0;
+    var a = values.slice().sort(function (x, y) { return x - y; });
+    return a[(a.length / 2) | 0];
+  }
+
+  function sendBatch(now) {
+    if (!batchFrames.length) return;
+    var payload = JSON.stringify({
+      frames: batchFrames
+    });
+    try { navigator.sendBeacon("/__vapour/records", payload); } catch (e) {}
+    batchFrames = [];
+    lastFlush = now;
+  }
+
   function frame(t) {
     if (last) {
       var d = t - last;
+      if (!start) start = t;
       times[n % MAX] = d;
       n++; total++; sumMs += d;
       if (d > worst) worst = d;
+      var spike = false;
+      if (recent.length >= 10) {
+        var m = median(recent);
+        spike = m > 0 && d > m * 2;
+      }
+      recent.push(d);
+      if (recent.length > 120) recent.shift();
+      batchFrames.push({ durationMs: d, timeMs: t - start, spike: spike, epochMs: performance.timeOrigin + t });
       winFrames++;
+      if (!lastFlush) lastFlush = t;
+      if (t - lastFlush >= 1000) sendBatch(t);
       if (t - winStart >= 500) {
         fps = (winFrames * 1000) / (t - winStart);
         winStart = t; winFrames = 0;
@@ -55,6 +85,7 @@
       }
     } else {
       winStart = t;
+      start = t;
     }
     last = t;
     requestAnimationFrame(frame);
@@ -65,6 +96,7 @@
   function report() {
     if (sent || total < 2) return;
     sent = true;
+    sendBatch(performance.now());
     var body = JSON.stringify({
       frames: total,
       avgFps: total ? (total * 1000) / sumMs : 0,

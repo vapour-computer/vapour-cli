@@ -26,6 +26,7 @@ var fpsJS []byte
 const (
 	fpsPath          = "/__vapour/fps.js"
 	reportPath       = "/__vapour/report"
+	recordsPath      = "/__vapour/records"
 	scriptTag        = `<script src="` + fpsPath + `"></script>`
 	playPrefix       = "/play/local/"
 	devRuntimeMarker = `data-vapour="dev-runtime"`
@@ -39,6 +40,17 @@ type Report struct {
 	WorstMS float64 `json:"worstMs"`
 }
 
+type FrameRecord struct {
+	DurationMS float64 `json:"durationMs"`
+	TimeMS     float64 `json:"timeMs"`
+	Spike      bool    `json:"spike"`
+	EpochMS    float64 `json:"epochMs"`
+}
+
+type RecordsBatch struct {
+	Frames []FrameRecord `json:"frames"`
+}
+
 // Options configures the server.
 type Options struct {
 	// FS is the web export. It must contain index.html.
@@ -47,6 +59,8 @@ type Options struct {
 	Telemetry bool
 	// OnReport is called with the summary when a page with the overlay is closed. May be nil.
 	OnReport func(Report)
+	// OnRecords receives periodic frame records from the overlay.
+	OnRecords func(RecordsBatch)
 	// Player serves a local player shell with an iframe using production-like sandbox/allow attributes.
 	Player bool
 	// Mobile enables phone-like shell sizing/hints for --player previews.
@@ -98,6 +112,21 @@ func Handler(o Options) http.Handler {
 			}
 			if o.OnReport != nil {
 				o.OnReport(rep)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+		mux.HandleFunc(recordsPath, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost || !sameOrigin(r) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			var batch RecordsBatch
+			if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&batch); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if o.OnRecords != nil {
+				o.OnRecords(batch)
 			}
 			w.WriteHeader(http.StatusNoContent)
 		})
