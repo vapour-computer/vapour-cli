@@ -43,11 +43,14 @@ notes = ""                   # ignored by publish; use --notes/--notes-file inst
 
 `Manifest.Validate()` (used by `publish`, `test`, `build`) enforces:
 - required project title/engine/version/build.dir
+- `build.dir` must be relative (no absolute path, no `..` escape)
 - platform enum validation
 - controller schema validation
 - pointer lock enum (`auto|pause|off`)
 - runtime (`coep`, `entry`, `on_quit`)
 - mobile (`orientation`, `render_scale`, `max_dpr`)
+
+`publish`/`test` resolve `build.dir` through symlinks and reject anything outside the game folder.
 
 `Load` errors with a hint if no `vapour.toml` exists.
 `Save` rewrites the file (used to store project id), so comments are not preserved.

@@ -4,7 +4,11 @@ Creates `./<slug>/` where slug = `project.Slugify(name)` (lowercase `[a-z0-9-]`,
 Fails if the folder exists and is non-empty.
 
 `create` flags: `--engine godot|unity|bevy|other` (default godot), `--from <git-url>` (shallow clone, `.git` removed,
-store files still added), `--offline` (skip server registration; `publish`/`store push` register it later and write the id).
+store files still added), `--offline` (skip server registration; `publish`/`store push` register it later and write the id),
+`--allow-untrusted-template`.
+
+Template source safety: `--from` accepts only `vapour-computer/*` GitHub repos by default
+(`https://github.com/...` or `git@github.com:...`). Other sources require `--allow-untrusted-template`.
 
 `template` command is a thin wrapper around `create`: it maps `engine` to a GitHub template repo URL and then uses
 the same project initialization path. Default org is `vapour-computer`; override with `--org`.

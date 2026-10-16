@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Client struct {
@@ -28,8 +29,8 @@ func New(base, token, userAgent string) *Client {
 		Base:      strings.TrimRight(base, "/"),
 		Token:     token,
 		UserAgent: userAgent,
-		// No overall timeout: uploads can be large. Callers use contexts.
-		HTTP: &http.Client{Timeout: 0},
+		// Keep a high, finite timeout. Callers still provide contexts.
+		HTTP: &http.Client{Timeout: 10 * time.Minute},
 	}
 }
 
@@ -60,17 +61,23 @@ type Dev struct {
 }
 
 type Game struct {
-	ID       string `json:"id"`
-	DevUID   string `json:"dev_uid"`
-	Title    string `json:"title"`
-	Slug     string `json:"slug"`
-	Engine   string `json:"engine"`
-	Version  string `json:"version"`
-	BuildURL string `json:"build_url"`
-	CoverURL string `json:"cover_url"`
-	Status   string `json:"status"`
-	Category string `json:"category"`
-	Tagline  string `json:"tagline"`
+	ID       string    `json:"id"`
+	DevUID   string    `json:"dev_uid"`
+	Title    string    `json:"title"`
+	Slug     string    `json:"slug"`
+	Engine   string    `json:"engine"`
+	Version  string    `json:"version"`
+	BuildURL string    `json:"build_url"`
+	CoverURL string    `json:"cover_url"`
+	Status   string    `json:"status"`
+	Category string    `json:"category"`
+	Tagline  string    `json:"tagline"`
+	Releases []Release `json:"releases"`
+}
+
+// Release is one published version of a game.
+type Release struct {
+	Version string `json:"version"`
 }
 
 type MeResponse struct {
