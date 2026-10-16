@@ -34,6 +34,19 @@ vapour publish --version 0.1.0 --notes "First release"
 
 `vapour-cli update` installs the latest release over the running binary (checksum verified). `--check` only reports, `--version v0.2.0` picks a release. Not available on Windows.
 
+When not running in CI, the CLI checks for a newer release at most once every 24 hours and prints:
+`vapour X.Y.Z is available (you have A.B.C). Run: vapour update`.
+Set `VAPOUR_NO_UPDATE_CHECK=1` to opt out.
+
+### Releases
+
+Every push to `main` runs tests and ships a release from `.github/workflows/release.yml`.
+By default this bumps patch. Include `[minor]` or `[major]` in any commit subject since the last tag to change bump.
+`workflow_dispatch` can force `patch`, `minor`, or `major`.
+If `HEAD` already has a `v*` tag, reruns skip tag creation.
+Docs-only pushes (`**/*.md`, `docs/**`) do not release.
+Manual `v*` tag pushes still run the same release workflow without creating a new tag.
+
 ### Test locally
 
 ```sh

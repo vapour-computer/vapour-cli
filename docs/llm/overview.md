@@ -27,7 +27,7 @@ driven by a per-game `vapour.toml` (see [manifest.md](manifest.md)).
 - Credentials file: `$XDG_CONFIG_HOME/vapour/credentials` or `~/.config/vapour/credentials`.
 
 ## Env vars
-`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `XDG_CONFIG_HOME`, `GODOT`, `UNITY_EDITOR` (build).
+`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `VAPOUR_NO_UPDATE_CHECK`, `VAPOUR_RELEASES_URL` (release endpoint override), `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `GODOT`, `UNITY_EDITOR` (build).
 
 ## Conventions
 - Errors: returned from `RunE`; `cmd.ErrorMessage` prints `error: ...` plus the docs URL
