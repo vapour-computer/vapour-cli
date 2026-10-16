@@ -355,6 +355,18 @@ func TestPublishUploadsAttestationAndBuild(t *testing.T) {
 	}
 }
 
+func TestChunkUploadCannotBypassVerificationGate(t *testing.T) {
+	api := zipEnv(t)
+	dir := writeFolderProject(t)
+	out, err := run(t, "publish", "--dir", dir, "--version", "0.1.0", "--notes", "x", "--skip-store", "--experimental-chunks")
+	if err == nil || !strings.Contains(err.Error(), "cannot upload without a signed build attestation") {
+		t.Fatalf("chunk upload should be blocked: err=%v out=%q", err, out)
+	}
+	if api.count() != 0 {
+		t.Fatalf("chunk upload reached server: %d request(s)", api.count())
+	}
+}
+
 func TestVerifyLocalZipAndTampering(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		zipEnv(t)

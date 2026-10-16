@@ -192,10 +192,11 @@ Current limits (source values):
 Zip scan and signing (preview, CLI v0.2):
 - `vapour scan <zip|dir>` (also `--dir`, `--json`) checks a build locally; exit 1 on any error finding. It writes no attestation.
 - `vapour verify <zip> [--attestation <file>] [--json]` checks a zip against its attestation locally.
-- `vapour publish` (including `--dry-run`) runs the scan, signs the zip and writes `.vapour/build.zip.attestation.json`. There is no flag to skip the scan. With `--experimental-chunks` the scan runs but no attestation is sent.
+- `vapour publish` (including `--dry-run`) scans, signs and locally verifies the exact ZIP; it writes `.vapour/build.zip.attestation.json`. There is no flag to skip verification. `--experimental-chunks` supports dry runs but cannot upload without an attestation.
 - `vapour verify <zip> --remote --version <semver>` also compares the server's recorded SHA-256 and status; exit 1 unless the status is `verified`.
 - `vapour verify --remote --version <semver>` may omit the ZIP: it checks the signed attestation and server record, but not local ZIP bytes. `--dir` selects the project and `--json` emits a result object.
-- Server verification is asynchronous: the upload is accepted right away and the server records `pending`, then `verified`, `rejected` or `unverified`. `unverified` means no attestation was sent (older CLI) and the server scan passed.
+- The server first requires and independently verifies the signed attestation, registered developer key, ZIP SHA-256 and size before storing a version. Missing signatures return 400 `verification_required`; forged, mismatched or wrong-key signatures return 400 `verification_failed`. Malformed, duplicate or oversized attestations return 400 `invalid_upload`.
+- The independent archive scan is asynchronous after accepted uploads: the server records `pending`, then `verified` or `rejected`. Legacy versions or queue failures can still appear as `unverified`; new unsigned ZIP uploads are not accepted.
 - Reject reasons include `bad_signature`, `hash_mismatch`, `size_mismatch`, `bad_key_id`, `bad_key`, `unsupported_version`, `unknown_key`, `bad_attestation`, or any scan code. A rejected version is taken offline and can never be approved; publish a new version.
 - Malformed requests (invalid attestation JSON, attestation over 64 KiB) fail immediately with HTTP 400 `invalid_upload`.
 - The first valid signing key a developer account uses is remembered; a zip signed by a different key is rejected with `unknown_key`. Losing the key requires a platform-team reset.
