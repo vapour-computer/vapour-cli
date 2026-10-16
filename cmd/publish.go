@@ -44,6 +44,9 @@ Release notes are required with --notes or --notes-file.`,
 			if err := m.Validate(); err != nil {
 				return err
 			}
+			if strings.TrimSpace(m.Store.Notes) != "" {
+				fmt.Fprintln(out, "Warning: store.notes in vapour.toml is ignored by publish; use --notes or --notes-file.")
+			}
 			emitPerfHints(out, dir, m, noPerfHints)
 
 			var bundle *storepage.Bundle
@@ -104,6 +107,7 @@ Release notes are required with --notes or --notes-file.`,
 					fmt.Fprintf(out, "Chunked dry run: %d files, nothing uploaded.\n", len(manifest.Files))
 					return nil
 				}
+				fmt.Fprintln(out, "Warning: release notes are not sent with --experimental-chunks")
 				c, err := client(true)
 				if err != nil {
 					return err

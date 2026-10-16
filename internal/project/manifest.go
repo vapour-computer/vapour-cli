@@ -50,7 +50,7 @@ type Store struct {
 	Page string `toml:"page,omitempty"`
 	// Content is the Markdown text (the "template.md" that `vapour create` writes).
 	Content string `toml:"content,omitempty"`
-	// Notes is optional Markdown release notes for the version being published.
+	// Notes is a legacy field kept for compatibility; publish ignores it.
 	Notes string `toml:"notes,omitempty"`
 }
 

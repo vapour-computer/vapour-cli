@@ -310,4 +310,18 @@ func TestPublishRequiresVersionAndNotes(t *testing.T) {
 	if _, err := run(t, "publish", "--dir", game, "--dry-run", "--skip-store", "--version", "0.2.0"); err == nil || !strings.Contains(err.Error(), "release notes are required") {
 		t.Fatalf("dry-run without notes: %v", err)
 	}
+
+	mfPath := filepath.Join(game, "vapour.toml")
+	mf, err := os.ReadFile(mfPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mf = []byte(strings.Replace(string(mf), "[store]\n", "[store]\nnotes = 'legacy notes'\n", 1))
+	if err := os.WriteFile(mfPath, mf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, "publish", "--dir", game, "--dry-run", "--skip-store", "--version", "0.2.0", "--notes", "x")
+	if err != nil || !strings.Contains(out, "store.notes in vapour.toml is ignored by publish") {
+		t.Fatalf("store.notes warning: err=%v out=%q", err, out)
+	}
 }

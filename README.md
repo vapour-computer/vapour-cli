@@ -108,7 +108,7 @@ on_quit = "store"      # store (default) | home | reload | stay
 [store]
 page = "store/page.json"       # JSON template: details, media files, layout
 content = "store/template.md"  # Markdown text of the store page
-notes = ""                     # optional text you can keep in the manifest (publish requires --notes/--notes-file)
+notes = ""                     # ignored by `vapour publish`; pass --notes or --notes-file instead
 ```
 
 ### Phones: orientation and touch controls
