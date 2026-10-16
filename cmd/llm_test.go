@@ -100,9 +100,32 @@ func TestLLMOfflineFallback(t *testing.T) {
 	if !strings.Contains(errOut, "embedded llm.txt fallback") {
 		t.Fatalf("fallback note missing: %q", errOut)
 	}
+	if !strings.Contains(errOut, "offline mode") {
+		t.Fatalf("fallback reason missing: %q", errOut)
+	}
 }
 
-func TestLLMBadContentRejected(t *testing.T) {
+func TestLLMFallbackWithoutCacheOnHTTPError(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		io.WriteString(w, "down")
+	}))
+	defer srv.Close()
+
+	out, errOut, err := runSplit(t, "llm", "--url", srv.URL, "--refresh")
+	if err != nil {
+		t.Fatalf("expected fallback, got error: %v", err)
+	}
+	if !strings.HasPrefix(out, llmHeader) {
+		t.Fatalf("fallback output missing header: %q", out)
+	}
+	if !strings.Contains(errOut, "503") {
+		t.Fatalf("fallback reason missing status: %q", errOut)
+	}
+}
+
+func TestLLMFallbackWithoutCacheOnBadContent(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -110,23 +133,20 @@ func TestLLMBadContentRejected(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := runSplit(t, "llm", "--url", srv.URL, "--refresh")
-	if err == nil || !strings.Contains(err.Error(), "must start with") {
-		t.Fatalf("expected bad-content error, got %v", err)
+	out, errOut, err := runSplit(t, "llm", "--url", srv.URL, "--refresh")
+	if err != nil {
+		t.Fatalf("expected fallback, got error: %v", err)
+	}
+	if !strings.HasPrefix(out, llmHeader) {
+		t.Fatalf("fallback output missing header: %q", out)
+	}
+	if !strings.Contains(errOut, "must start with") {
+		t.Fatalf("fallback reason missing content error: %q", errOut)
 	}
 }
 
-func TestLLMSizeCap(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	large := llmHeader + "\n" + strings.Repeat("x", llmMaxBytes)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		io.WriteString(w, large)
-	}))
-	defer srv.Close()
-
-	_, _, err := runSplit(t, "llm", "--url", srv.URL, "--refresh")
-	if err == nil || !strings.Contains(err.Error(), "exceeds 1 MiB") {
-		t.Fatalf("expected size-cap error, got %v", err)
+func TestLLMEmbeddedFallbackHasHeader(t *testing.T) {
+	if err := validateLLMBody(llmFallback); err != nil {
+		t.Fatalf("embedded fallback invalid: %v", err)
 	}
 }

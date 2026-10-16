@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	_ "embed"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -62,7 +61,7 @@ func newLLM() *cobra.Command {
 					_, werr := cmd.OutOrStdout().Write(cached)
 					return werr
 				}
-				noteFallback(cmd)
+				noteFallback(cmd, "offline mode")
 				_, werr := cmd.OutOrStdout().Write(llmFallback)
 				return werr
 			}
@@ -75,7 +74,9 @@ func newLLM() *cobra.Command {
 			if ferr == nil {
 				if notModified {
 					if !hasCache {
-						return fmt.Errorf("server returned 304 but no local cache exists")
+						noteFallback(cmd, "server returned 304 but no local cache exists")
+						_, werr := cmd.OutOrStdout().Write(llmFallback)
+						return werr
 					}
 					_, werr := cmd.OutOrStdout().Write(cached)
 					return werr
@@ -87,18 +88,14 @@ func newLLM() *cobra.Command {
 				return werr
 			}
 
-			var kind *llmFetchError
-			if errors.As(ferr, &kind) && kind.kind == "network" && !hasCache {
-				noteFallback(cmd)
-				_, werr := cmd.OutOrStdout().Write(llmFallback)
-				return werr
-			}
 			if hasCache {
 				noteStaleCache(cmd, modTime, ferr.Error())
 				_, werr := cmd.OutOrStdout().Write(cached)
 				return werr
 			}
-			return ferr
+			noteFallback(cmd, ferr.Error())
+			_, werr := cmd.OutOrStdout().Write(llmFallback)
+			return werr
 		},
 	}
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "force a network refresh")
@@ -222,6 +219,10 @@ func noteStaleCache(cmd *cobra.Command, modTime time.Time, reason string) {
 	fmt.Fprintf(cmd.ErrOrStderr(), "Note: using cached llm.txt from %s ago (%s).\n", age, reason)
 }
 
-func noteFallback(cmd *cobra.Command) {
-	fmt.Fprintln(cmd.ErrOrStderr(), "Note: using embedded llm.txt fallback snapshot.")
+func noteFallback(cmd *cobra.Command, reason string) {
+	if strings.TrimSpace(reason) == "" {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Note: using embedded llm.txt fallback snapshot.")
+		return
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "Note: using embedded llm.txt fallback snapshot (%s).\n", reason)
 }

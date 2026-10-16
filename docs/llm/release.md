@@ -4,6 +4,7 @@
 - Release: push a `v*` tag → `release.yml` runs goreleaser (`.goreleaser.yaml`): linux/darwin/windows × amd64/arm64,
   archives `vapour_<version>_<os>_<arch>.tar.gz` (zip on Windows) and `checksums.txt` as GitHub Release assets.
   Version is injected via `-X .../cmd.Version`.
+- Before release, run `scripts/sync-llm.sh` so embedded `cmd/llm_fallback.txt` matches `vapour-dev-docs` `book/llm.txt`.
 - Install: `curl -fsSL https://raw.githubusercontent.com/vapour-computer/vapour-cli/main/install.sh | sh`. Detects
   OS/arch, finds latest tag via the `/releases/latest` redirect, verifies SHA-256, installs to `/usr/local/bin` or
   `~/.local/bin`. Env: `VAPOUR_VERSION`, `VAPOUR_INSTALL_DIR`. Windows is not supported by the script.

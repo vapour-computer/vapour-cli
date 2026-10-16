@@ -28,7 +28,13 @@ Invalid content type/body/size is rejected.
 
 - `--offline`: never uses network; serves cache if present, otherwise embedded fallback
 - Embedded fallback uses `//go:embed` (`cmd/llm_fallback.txt`) for first run with no network
+- Any fetch failure with no cache (network, HTTP status, bad content type, bad header/body, size cap) falls back to embedded copy and prints the reason to stderr
 - On stale-cache or fallback use, command prints a stderr note (cache age/reason)
+
+## Keeping fallback in sync
+
+- `scripts/sync-llm.sh` downloads `book/llm.txt` from `vapour-dev-docs` `main` into `cmd/llm_fallback.txt`
+- Script validates required first-line header before replacing the file
 
 ## Why this exists
 
