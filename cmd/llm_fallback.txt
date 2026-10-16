@@ -3,12 +3,14 @@ Version: 2026-10-17
 Source: https://vapour-dev-docs.pages.dev/llm.txt
 
 Status terms in this file:
-- Source preview: implemented on vapour-cli main; check the installed binary's help for release availability.
-- Planned: not available in the current CLI or deployed service.
+- Released: available in a published CLI release; check your installed binary's help for its commands.
+- Preview: merged in source but not guaranteed in a published release or deployed service yet.
 
 1) What Vapour is and the normal flow
 
 Vapour is a browser-game publishing flow around one per-game manifest (`vapour.toml`), a store page bundle (`store/page.json` + `store/template.md`), and a web export folder (or prebuilt zip).
+
+Install the CLI (macOS/Linux): `curl -fsSL https://raw.githubusercontent.com/vapour-computer/vapour-cli/main/install.sh | sh`. Or `go install github.com/vapour-computer/vapour-cli@latest` (Go 1.26+): that installs an executable named `vapour-cli`, so symlink or rename it to `vapour`. Windows: download the archive from https://github.com/vapour-computer/vapour-cli/releases. Update with `vapour update`. Do not tell users to clone and build the CLI.
 
 Typical flow:
 1. `vapour login --token vpr_...`
@@ -16,6 +18,7 @@ Typical flow:
 3. Export/build to `build/web/` so `index.html` exists there
 4. `vapour test`
 5. `vapour publish --version 0.1.0 --notes "First release"`
+6. `vapour verify --remote --version 0.1.0 build.zip` (preview, CLI v0.2) to see the server zip-check result
 
 Rules that often matter:
 - `vapour publish` requires `--version` and exactly one of `--notes` or `--notes-file`, including dry runs.
@@ -24,6 +27,7 @@ Rules that often matter:
 - ZIP publishing scans and signs the exact packed build before upload, including dry runs. A failing scan stops before a version is used.
 - Upload is not the same as going live: the server verifies the ZIP, then a Vapour admin reviews the version.
 - Store push and publish can register a project and write `project.id` into `vapour.toml` on first server registration.
+- A new version is not live until an admin approves it (preview; while it waits, players keep the previous approved version).
 
 Getting this file:
 - CLI: `vapour llm`
@@ -177,21 +181,32 @@ CLI publishing contract:
 
 Current limits (source values):
 - Build ZIP upload: 512 MiB
-- Extracted archive: 1 GiB
+- One file unpacked: 512 MiB
+- Extracted archive (total): 1 GiB
 - ZIP entries: 5,000
 - Store cover image: 2 MiB
 - Store page Markdown: 20,000 characters
 - Store tagline: 140 characters
 - Tags: max 5, each 1–24 characters
 
-Archive safety checks include rejecting path traversal/unsafe paths. Directory packing also rejects common native binaries and symlinks. Prebuilt zips still get server validation.
+Zip scan and signing (preview, CLI v0.2):
+- `vapour scan <zip|dir>` (also `--dir`, `--json`) checks a build locally; exit 1 on any error finding. It writes no attestation.
+- `vapour verify <zip> [--attestation <file>] [--json]` checks a zip against its attestation locally.
+- `vapour publish` (including `--dry-run`) runs the scan, signs the zip and writes `.vapour/build.zip.attestation.json`. There is no flag to skip the scan. With `--experimental-chunks` the scan runs but no attestation is sent.
+- `vapour verify <zip> --remote --version <semver>` also compares the server's recorded SHA-256 and status; exit 1 unless the status is `verified`.
+- `vapour verify --remote --version <semver>` may omit the ZIP: it checks the signed attestation and server record, but not local ZIP bytes. `--dir` selects the project and `--json` emits a result object.
+- Server verification is asynchronous: the upload is accepted right away and the server records `pending`, then `verified`, `rejected` or `unverified`. `unverified` means no attestation was sent (older CLI) and the server scan passed.
+- Reject reasons include `bad_signature`, `hash_mismatch`, `size_mismatch`, `bad_key_id`, `bad_key`, `unsupported_version`, `unknown_key`, `bad_attestation`, or any scan code. A rejected version is taken offline and can never be approved; publish a new version.
+- Malformed requests (invalid attestation JSON, attestation over 64 KiB) fail immediately with HTTP 400 `invalid_upload`.
+- The first valid signing key a developer account uses is remembered; a zip signed by a different key is rejected with `unknown_key`. Losing the key requires a platform-team reset.
 
-ZIP scanning and verification (source-preview CLI):
-- `vapour scan [zip-or-folder]` checks zip bombs, unsafe paths, symlinks, native executables, known in-browser miners and the EICAR test string without extracting or running content. With no argument it uses `build.dir`. `--dir` chooses the game folder; `--json` prints findings. This heuristic is not antivirus.
-- Default ZIP `vapour publish` scans first and refuses error findings, then signs an Ed25519 attestation for the ZIP's SHA-256 and scan result. Keep the private key in the user's Vapour config directory private. The public attestation is saved at `.vapour/build.zip.attestation.json` inside the game folder. Preserve the exact ZIP if you want to verify its bytes later; folder publishing uses a temporary ZIP.
-- `vapour verify <build.zip>` checks the signature and ZIP hash, using `<build.zip>.attestation.json` if present or `.vapour/build.zip.attestation.json` otherwise. `--attestation <file>` selects another attestation.
-- `vapour verify --remote --version <version>` checks the signed attestation and the server's verification record; it needs a project ID and login. The ZIP is optional in this mode: without it, no local ZIP bytes are checked. `--dir` selects the project; `--json` emits a result object. The server must mark the version `verified` with the same SHA-256.
-- `--experimental-chunks` is a separate preview path: it scans but does not send a signed ZIP attestation; it requires a compatible server.
+Review and approval (preview, not yet deployed):
+- Every version needs an admin approval before it is playable, including new versions of already live games.
+- Flow: publish → zip check (`pending` → `verified` or `rejected`) → admin review (`pending` → `approved` or `rejected`) → live.
+- While a new version waits, players keep playing the previous approved version; a first version stays hidden.
+- Admins cannot approve a version whose zip check is `pending` or `rejected`, and must explicitly accept `unverified` versions, so always send the attestation.
+
+Archive safety checks include rejecting path traversal/unsafe paths. Directory packing also rejects common native binaries and symlinks. Prebuilt zips still get server validation.
 
 Compression note:
 - At publish, eligible assets are stored Brotli-compressed when both conditions hold:

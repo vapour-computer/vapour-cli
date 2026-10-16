@@ -117,14 +117,17 @@ func TestRootHelpShowsArtWithoutPollutingCommandHelp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(rootHelp, "\\ V /") || !strings.Contains(rootHelp, "Docs: "+DocsURL) {
+	if !strings.Contains(rootHelp, "  vapour\n") || !strings.Contains(rootHelp, "       .  : .") || !strings.Contains(rootHelp, "Docs: "+DocsURL) {
 		t.Fatalf("root help missing art or docs: %q", rootHelp)
+	}
+	if strings.Contains(rootHelp, "\x1b[") {
+		t.Fatalf("root help adds terminal colors to redirected output: %q", rootHelp)
 	}
 	commandHelp, err := run(t, "scan", "--help")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(commandHelp, "\\ V /") {
+	if strings.Contains(commandHelp, "  vapour\n") {
 		t.Fatalf("command help contains root art: %q", commandHelp)
 	}
 }
