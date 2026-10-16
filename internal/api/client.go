@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,7 +159,9 @@ type Part struct {
 }
 
 // Publish uploads a build (zip) for a new version, with optional Markdown release notes, streaming the request body.
-func (c *Client) Publish(ctx context.Context, projectID, version, notes string, metadata map[string]any, build File) (*PublishResponse, error) {
+// attestation is the signed zip attestation (JSON). When set, the server must re-hash the zip, check the signature and
+// reject the upload with error code zip_verification_failed on any mismatch.
+func (c *Client) Publish(ctx context.Context, projectID, version, notes string, metadata map[string]any, build File, attestation []byte) (*PublishResponse, error) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
@@ -180,6 +183,11 @@ func (c *Client) Publish(ctx context.Context, projectID, version, notes string, 
 					return err
 				}
 			}
+			if len(attestation) > 0 {
+				if err := part(mw, "attestation", File{Name: "build.zip.attestation.json", Body: bytes.NewReader(attestation)}, "application/json"); err != nil {
+					return err
+				}
+			}
 			if err := part(mw, "build", build, "application/zip"); err != nil {
 				return err
 			}
@@ -194,6 +202,30 @@ func (c *Client) Publish(ctx context.Context, projectID, version, notes string, 
 		return nil, err
 	}
 	return &r, nil
+}
+
+// ZipVerification is the server's record of how it checked one version's zip.
+type ZipVerification struct {
+	Status     string `json:"status"` // verified | rejected | unverified
+	SHA256     string `json:"sha256,omitempty"`
+	Size       int64  `json:"size,omitempty"`
+	KeyID      string `json:"key_id,omitempty"`
+	VerifiedAt string `json:"verified_at,omitempty"`
+	Findings   []struct {
+		Severity string `json:"severity"`
+		Code     string `json:"code"`
+		Path     string `json:"path,omitempty"`
+		Message  string `json:"message"`
+	} `json:"findings,omitempty"`
+}
+
+// VersionVerification fetches the server's zip verification record for a published version.
+func (c *Client) VersionVerification(ctx context.Context, projectID, version string) (*ZipVerification, error) {
+	var v ZipVerification
+	if err := c.do(ctx, http.MethodGet, "/projects/"+projectID+"/versions/"+url.PathEscape(version)+"/verification", nil, "", &v); err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // PutStore updates a game's store page: metadata JSON (tagline, description, category, tags, page) and media files.

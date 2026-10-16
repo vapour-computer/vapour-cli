@@ -63,6 +63,10 @@ Release notes are required with --notes or --notes-file.`,
 			// Resolve the build: a folder is checked and zipped; a .zip is uploaded as is.
 			buildPath := filepath.Join(dir, m.Build.Dir)
 			if chunked {
+				if err := scanFolder(out, buildPath); err != nil {
+					return err
+				}
+				fmt.Fprintln(out, "Note: --experimental-chunks sends no signed attestation; the server checks the chunks itself.")
 				cache, err := os.MkdirTemp("", "vapour-chunks-*")
 				if err != nil {
 					return err
@@ -140,6 +144,15 @@ Release notes are required with --notes or --notes-file.`,
 				return fmt.Errorf("build is %d MiB; the limit is %d MiB", st.Size()>>20, maxBuild>>20)
 			}
 			fmt.Fprintf(out, "Packed %s (%.1f MiB) as version %s\n", m.Build.Dir, float64(st.Size())/(1<<20), m.Project.Version)
+			// Static analysis runs before anything is sent. Any error finding stops here: no upload, no version used.
+			report, err := scanZip(out, zipPath)
+			if err != nil {
+				return err
+			}
+			attestation, err := signZip(out, zipPath, dir, report)
+			if err != nil {
+				return err
+			}
 			printBundle(out, bundle)
 			meta, err := publishMetadata(m, dir)
 			if err != nil {
@@ -170,7 +183,7 @@ Release notes are required with --notes or --notes-file.`,
 			}
 			defer f.Close()
 			fmt.Fprintf(out, "Uploading version %s to %s ...\n", m.Project.Version, c.Base)
-			res, err := c.Publish(cmd.Context(), m.Project.ID, m.Project.Version, releaseNotes, meta, api.File{Name: "build.zip", Body: f})
+			res, err := c.Publish(cmd.Context(), m.Project.ID, m.Project.Version, releaseNotes, meta, api.File{Name: "build.zip", Body: f}, attestation)
 			if err != nil {
 				var ae *api.Error
 				if errors.As(err, &ae) && ae.Code == "version_exists" {
@@ -178,7 +191,8 @@ Release notes are required with --notes or --notes-file.`,
 				}
 				return err
 			}
-			fmt.Fprintf(out, "Published %s v%s\n%s\n", res.Game.Title, res.Game.Version, res.URL)
+			fmt.Fprintf(out, "Uploaded %s v%s\n%s\n", res.Game.Title, m.Project.Version, res.URL)
+			fmt.Fprintf(out, "The server now verifies the zip, then a Vapour admin reviews this version before it goes live.\nCheck progress: vapour verify --remote --version %s\n", m.Project.Version)
 			return nil
 		},
 	}
