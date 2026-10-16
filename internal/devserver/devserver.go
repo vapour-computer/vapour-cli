@@ -24,10 +24,11 @@ import (
 var fpsJS []byte
 
 const (
-	fpsPath    = "/__vapour/fps.js"
-	reportPath = "/__vapour/report"
-	scriptTag  = `<script src="` + fpsPath + `"></script>`
-	playPrefix = "/play/local/"
+	fpsPath          = "/__vapour/fps.js"
+	reportPath       = "/__vapour/report"
+	scriptTag        = `<script src="` + fpsPath + `"></script>`
+	playPrefix       = "/play/local/"
+	devRuntimeMarker = `data-vapour="dev-runtime"`
 )
 
 // Report is the frame summary the overlay sends when the page is closed.
@@ -56,6 +57,18 @@ type Options struct {
 	MobileRenderScale float64
 	// MobileMaxDPR mirrors vapour.toml [mobile].max_dpr.
 	MobileMaxDPR *float64
+	// OnQuit mirrors vapour.toml [runtime].on_quit for local player behavior.
+	OnQuit string
+}
+
+func normalizeOnQuit(value string) string {
+	v := strings.TrimSpace(strings.ToLower(value))
+	switch v {
+	case "home", "reload", "stay":
+		return v
+	default:
+		return "store"
+	}
 }
 
 func init() {
@@ -117,7 +130,8 @@ func servePlayer(w http.ResponseWriter, r *http.Request, o Options) {
 	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 		mobileClass := ""
 		mobileScript := ""
-		playerScript := `<script>(function(){const play=document.getElementById('play');const frame=document.getElementById('vapour-frame');const ended=document.getElementById('quit-panel');const replay=document.getElementById('quit-replay');const back=document.getElementById('quit-back');const start=()=>{frame.focus();frame.contentWindow&&frame.contentWindow.focus();};play.addEventListener('click',start);replay.addEventListener('click',()=>{const src=frame.getAttribute('src')||'';const clean=src.split('#')[0].split('?')[0];frame.setAttribute('src',clean+'?__vapour_reload='+Date.now());ended.style.display='none';});back.addEventListener('click',()=>location.assign('/'));addEventListener('message',(e)=>{if(e.source!==frame.contentWindow||!e.data||e.data.type!=='vapour:quit')return;const mode=String(e.data.on_quit||'store');if(mode==='store'||mode==='home'){location.assign('/');return;}if(mode==='reload'){replay.click();return;}if(mode==='stay'){ended.style.display='block';return;}location.assign('/');});})();</script>`
+		quitMode := normalizeOnQuit(o.OnQuit)
+		playerScript := `<script>(function(){const mode='` + quitMode + `';const play=document.getElementById('play');const frame=document.getElementById('vapour-frame');const ended=document.getElementById('quit-panel');const replay=document.getElementById('quit-replay');const back=document.getElementById('quit-back');const start=()=>{frame.focus();frame.contentWindow&&frame.contentWindow.focus();};play.addEventListener('click',start);replay.addEventListener('click',()=>{const src=frame.getAttribute('src')||'';const clean=src.split('#')[0].split('?')[0];frame.setAttribute('src',clean+'?__vapour_reload='+Date.now());ended.style.display='none';});back.addEventListener('click',()=>location.assign('/'));addEventListener('message',(e)=>{if(e.source!==frame.contentWindow||!e.data||e.data.type!=='vapour:quit')return;if(mode==='store'||mode==='home'){location.assign('/');return;}if(mode==='reload'){replay.click();return;}if(mode==='stay'){ended.style.display='block';return;}location.assign('/');});})();</script>`
 		if o.Mobile {
 			mobileClass = " mobile"
 			orientation := o.MobileOrientation
@@ -183,29 +197,28 @@ func serveBuildFile(w http.ResponseWriter, r *http.Request, o Options, rel strin
 			cenc = sniffed
 		}
 	}
-	if o.Mobile && (rel == "index.html" || strings.HasSuffix(strings.ToLower(rel), "/index.html")) && r.Method != http.MethodHead && r.URL.Query().Get("__vapour_mobile") == "1" {
+	if (rel == "index.html" || strings.HasSuffix(strings.ToLower(rel), "/index.html")) && r.Method != http.MethodHead {
 		html, err := io.ReadAll(rs)
 		if err == nil {
-			orientation := o.MobileOrientation
-			if orientation == "" {
-				orientation = "any"
-			}
-			renderScale := o.MobileRenderScale
-			if renderScale <= 0 {
-				renderScale = 1
-			}
-			maxDpr := "null"
-			if o.MobileMaxDPR != nil {
-				maxDpr = strconv.FormatFloat(*o.MobileMaxDPR, 'f', -1, 64)
-			}
-			mobileRuntime := `<script>window.__VAPOUR_RUNTIME_SETTINGS={"mobile":{"orientation":"` + orientation + `","render_scale":` + strconv.FormatFloat(renderScale, 'f', -1, 64) + `,"max_dpr":` + maxDpr + `}};(function(){const s=window.__VAPOUR_RUNTIME_SETTINGS.mobile||{};let dpr=window.devicePixelRatio||1;if(typeof s.render_scale==='number'&&s.render_scale>0)dpr=dpr*s.render_scale;if(typeof s.max_dpr==='number'&&s.max_dpr>0)dpr=Math.min(dpr,s.max_dpr);try{Object.defineProperty(window,'devicePixelRatio',{configurable:true,get:()=>dpr});}catch{}})();</script>`
 			text := string(html)
-			lower := strings.ToLower(text)
-			if i := strings.Index(lower, "<head>"); i >= 0 {
-				insertAt := i + len("<head>")
-				text = text[:insertAt] + mobileRuntime + text[insertAt:]
-			} else {
-				text = mobileRuntime + text
+			if !strings.Contains(text, devRuntimeMarker) {
+				text = injectIntoHead(text, devRuntimeScript())
+			}
+			if o.Mobile && r.URL.Query().Get("__vapour_mobile") == "1" {
+				orientation := o.MobileOrientation
+				if orientation == "" {
+					orientation = "any"
+				}
+				renderScale := o.MobileRenderScale
+				if renderScale <= 0 {
+					renderScale = 1
+				}
+				maxDpr := "null"
+				if o.MobileMaxDPR != nil {
+					maxDpr = strconv.FormatFloat(*o.MobileMaxDPR, 'f', -1, 64)
+				}
+				mobileRuntime := `<script>window.__VAPOUR_RUNTIME_SETTINGS={"mobile":{"orientation":"` + orientation + `","render_scale":` + strconv.FormatFloat(renderScale, 'f', -1, 64) + `,"max_dpr":` + maxDpr + `}};(function(){const s=window.__VAPOUR_RUNTIME_SETTINGS.mobile||{};let dpr=window.devicePixelRatio||1;if(typeof s.render_scale==='number'&&s.render_scale>0)dpr=dpr*s.render_scale;if(typeof s.max_dpr==='number'&&s.max_dpr>0)dpr=Math.min(dpr,s.max_dpr);try{Object.defineProperty(window,'devicePixelRatio',{configurable:true,get:()=>dpr});}catch{}})();</script>`
+				text = injectIntoHead(text, mobileRuntime)
 			}
 			w.Header().Set("Content-Type", ctype)
 			w.Header().Set("Cache-Control", "no-store")
@@ -352,6 +365,22 @@ func inject(html []byte) []byte {
 		}
 	}
 	return []byte(s + scriptTag)
+}
+
+func injectIntoHead(html, script string) string {
+	lower := strings.ToLower(html)
+	if i := strings.Index(lower, "<head>"); i >= 0 {
+		insertAt := i + len("<head>")
+		return html[:insertAt] + script + html[insertAt:]
+	}
+	if i := strings.Index(lower, "</head>"); i >= 0 {
+		return html[:i] + script + html[i:]
+	}
+	return script + html
+}
+
+func devRuntimeScript() string {
+	return `<script ` + devRuntimeMarker + `>(function(){if(window.__vapourQuitRuntime)return;window.__vapourQuitRuntime=true;let quitSent=false;const quit=(code=0)=>{if(quitSent)return;quitSent=true;try{parent.postMessage({type:'vapour:quit',code:Number(code)||0},'*');}catch{}};window.vapour=Object.assign({},window.vapour||{},{quit});const hookUnity=()=>{if(typeof self.createUnityInstance!=='function'||self.createUnityInstance.__vapourQuitWrapped||self.createUnityInstance.__vapourWrapped)return;const original=self.createUnityInstance;const wrapped=function(canvas,config,onProgress){const result=original.call(this,canvas,config,onProgress);Promise.resolve(result).then((instance)=>{if(instance&&typeof instance.Quit==='function'&&!instance.Quit.__vapourQuitWrapped&&!instance.Quit.__vapourWrapped){const quitOriginal=instance.Quit.bind(instance);const wrappedQuit=(...args)=>{quit(0);return quitOriginal(...args);};wrappedQuit.__vapourQuitWrapped=true;instance.Quit=wrappedQuit;}}).catch(()=>{});return result;};wrapped.__vapourQuitWrapped=true;self.createUnityInstance=wrapped;};const hookGodot=()=>{const Engine=self.Engine;if(!Engine||!Engine.prototype||Engine.prototype.__vapourQuitWrapped||Engine.prototype.__vapourWrapped)return;const original=Engine.prototype.startGame;if(typeof original!=='function')return;Engine.prototype.startGame=function(...args){if(args[0]&&typeof args[0]==='object'){const options=args[0];const originalOnExit=options.onExit;options.onExit=(...exitArgs)=>{quit(exitArgs[0]);if(typeof originalOnExit==='function')return originalOnExit(...exitArgs);};}return original.apply(this,args);};Engine.prototype.__vapourQuitWrapped=true;};hookUnity();hookGodot();const t=setInterval(()=>{hookUnity();hookGodot();},100);addEventListener('load',()=>setTimeout(()=>clearInterval(t),10000));})();</script>`
 }
 
 // sameOrigin rejects cross-site posts: the Origin header, if present, must match the Host.

@@ -77,10 +77,31 @@ func TestPlayerModeServesIframeShell(t *testing.T) {
 	if !strings.Contains(body, "sandbox=\"allow-scripts allow-same-origin") || !strings.Contains(body, "src=\"/play/local/index.html?__vapour_mobile=1\"") {
 		t.Fatalf("shell missing iframe attrs: %s", body)
 	}
+	if !strings.Contains(body, "const mode='store'") {
+		t.Fatalf("shell should default to on_quit=store: %s", body)
+	}
 
 	asset := get(t, Handler(Options{FS: site(), Player: true}), "GET", "/play/local/game.wasm", nil, "")
 	if asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "application/wasm" {
 		t.Fatalf("player asset serve failed: code=%d ct=%q", asset.Code, asset.Header().Get("Content-Type"))
+	}
+}
+
+func TestPlayerModeUsesManifestOnQuitAndInjectsDevRuntime(t *testing.T) {
+	h := Handler(Options{FS: site(), Player: true, OnQuit: "reload"})
+	shell := get(t, h, "GET", "/", nil, "")
+	if !strings.Contains(shell.Body.String(), "const mode='reload'") || strings.Contains(shell.Body.String(), "e.data.on_quit") {
+		t.Fatalf("player should use manifest on_quit, not message payload: %s", shell.Body.String())
+	}
+	page := get(t, h, "GET", "/play/local/index.html", nil, "")
+	body := page.Body.String()
+	if !strings.Contains(body, devRuntimeMarker) {
+		t.Fatalf("dev runtime marker missing: %s", body)
+	}
+	for _, want := range []string{"window.vapour", "vapour:quit", "options.onExit", "instance.Quit"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dev runtime missing %q: %s", want, body)
+		}
 	}
 }
 

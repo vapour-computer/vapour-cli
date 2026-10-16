@@ -13,7 +13,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
-        .add_systems(Update, bridge_quit)
+        .add_systems(Last, bridge_quit)
         .run();
 }
 
@@ -21,7 +21,7 @@ fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
-fn bridge_quit(mut exits: EventReader<AppExit>) {
+fn bridge_quit(mut exits: MessageReader<AppExit>) {
     if exits.read().next().is_none() {
         return;
     }

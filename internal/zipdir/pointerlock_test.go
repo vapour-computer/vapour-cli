@@ -33,7 +33,7 @@ func TestInjectPointerLock(t *testing.T) {
 	if !strings.Contains(got, "target=this") {
 		t.Errorf("script should remember request target: %q", got)
 	}
-	for _, want := range []string{"Click to play", "Click to resume", "stopImmediatePropagation", "movementX", "unadjustedMovement", "pauseOnLoss=true"} {
+	for _, want := range []string{"Click to play", "Click to resume", "stopImmediatePropagation", "unadjustedMovement", "pauseOnLoss=true", "return request(this)", "return res", "spikeUntil=performance.now()+250", "now<spikeUntil", "(pointer: fine)", "sawMouse"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("script missing %q: %q", want, got)
 		}
