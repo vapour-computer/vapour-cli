@@ -105,3 +105,33 @@ func TestMaybeCheckForUpdateSkipsForUpdateAndVersionFlag(t *testing.T) {
 		t.Fatalf("unexpected output with --version: %q", versionErr.String())
 	}
 }
+
+func TestMaybeCheckForUpdateSkipsForNonSemverCurrentVersion(t *testing.T) {
+	oldVersion := Version
+	Version = "dev"
+	t.Cleanup(func() { Version = oldVersion })
+
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("CI", "")
+	t.Setenv("VAPOUR_NO_UPDATE_CHECK", "")
+
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"tag_name":"v9.9.9"}`))
+	}))
+	defer srv.Close()
+	t.Setenv("VAPOUR_RELEASES_URL", srv.URL)
+
+	var errOut bytes.Buffer
+	cmd := noticeCommand(t, "publish", &errOut)
+	maybeCheckForUpdate(cmd)
+
+	if got := atomic.LoadInt32(&requests); got != 0 {
+		t.Fatalf("requests = %d, want 0", got)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("unexpected output: %q", errOut.String())
+	}
+}

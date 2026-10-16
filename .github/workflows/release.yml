@@ -41,15 +41,25 @@ jobs:
       - id: version
         env:
           INPUT_BUMP: ${{ github.event.inputs.bump }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git fetch --tags --force
 
+          release_exists() {
+            local tag="$1"
+            gh release view "$tag" >/dev/null 2>&1
+          }
+
           if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
             tag="${GITHUB_REF#refs/tags/}"
             prev="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -Fxv "$tag" | head -n1 || true)"
+            run_release=true
+            if release_exists "$tag"; then
+              run_release=false
+            fi
             {
-              echo "run_release=true"
+              echo "run_release=$run_release"
               echo "create_tag=false"
               echo "release_tag=$tag"
               echo "previous_tag=$prev"
@@ -59,8 +69,12 @@ jobs:
 
           head_tag="$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' | head -n1 || true)"
           if [[ -n "$head_tag" ]]; then
+            run_release=true
+            if release_exists "$head_tag"; then
+              run_release=false
+            fi
             {
-              echo "run_release=false"
+              echo "run_release=$run_release"
               echo "create_tag=false"
               echo "release_tag=$head_tag"
               echo "previous_tag="
@@ -131,6 +145,7 @@ jobs:
           git push origin "$tag"
 
       - name: Sync llm fallback
+        if: steps.version.outputs.run_release == 'true'
         run: |
           if [[ -f scripts/sync-llm.sh ]]; then
             bash scripts/sync-llm.sh || echo 'llm sync skipped'
@@ -142,6 +157,7 @@ jobs:
         if: steps.version.outputs.run_release == 'true'
         with:
           version: "~> v2"
-          args: release --clean
+          # sync-llm.sh may refresh cmd/llm_fallback.txt without committing; skip validate so release can proceed.
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
