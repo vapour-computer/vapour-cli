@@ -24,9 +24,12 @@ var apiFlag string
 
 func newRoot() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "vapour",
-		Short:         "Create and publish web games on Vapour",
-		Long:          "Create and publish web games on Vapour.\n\nDocs: " + DocsURL,
+		Use:   "vapour",
+		Short: "Create and publish web games on Vapour",
+		Long:  "Create and publish web games on Vapour.\n\nDocs: " + DocsURL,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			maybeCheckForUpdate(cmd)
+		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       Version,

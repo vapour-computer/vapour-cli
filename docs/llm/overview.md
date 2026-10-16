@@ -30,7 +30,7 @@ For assistant context in-terminal: `vapour llm` (fetches docs `llm.txt`, caches 
 - Credentials file: `$XDG_CONFIG_HOME/vapour/credentials` or `~/.config/vapour/credentials`.
 
 ## Env vars
-`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `VAPOUR_LLM_URL` (`vapour llm` source override), `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `GODOT`, `UNITY_EDITOR` (build).
+`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `VAPOUR_NO_UPDATE_CHECK`, `VAPOUR_RELEASES_URL` (release endpoint override), `VAPOUR_LLM_URL` (`vapour llm` source override), `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `GODOT`, `UNITY_EDITOR` (build).
 
 ## Conventions
 - Errors: returned from `RunE`; `cmd.ErrorMessage` prints `error: ...` plus the docs URL
