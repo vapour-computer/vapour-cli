@@ -21,7 +21,7 @@ const maxBuild = 512 << 20 // matches the API limit
 
 func newPublish() *cobra.Command {
 	var dir, version, notes, notesFile string
-	var dryRun, skipStore bool
+	var dryRun, skipStore, noPerfHints bool
 	var chunked bool
 	cmd := &cobra.Command{
 		Use:   "publish",
@@ -42,6 +42,7 @@ your web export as a new version. Each version can be published once; bump "vers
 			if err := m.Validate(); err != nil {
 				return err
 			}
+			emitPerfHints(out, dir, m, noPerfHints)
 
 			var bundle *storepage.Bundle
 			if !skipStore {
@@ -184,6 +185,7 @@ your web export as a new version. Each version can be published once; bump "vers
 	cmd.Flags().StringVar(&notesFile, "notes-file", "", "read the release notes (Markdown) from a file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "check and zip everything, but do not upload")
 	cmd.Flags().BoolVar(&skipStore, "skip-store", false, "publish the build only; leave the store page as it is")
+	cmd.Flags().BoolVar(&noPerfHints, "no-perf-hints", false, "suppress performance hint warnings")
 	cmd.Flags().BoolVar(&chunked, "experimental-chunks", false, "use experimental v1 chunk protocol (requires a compatible server)")
 	return cmd
 }

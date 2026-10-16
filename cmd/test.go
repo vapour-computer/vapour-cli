@@ -23,7 +23,7 @@ import (
 func newTest() *cobra.Command {
 	var dir string
 	var port int
-	var noTelemetry, noOpen, noProfile, playerMode, mobilePreview bool
+	var noTelemetry, noOpen, noProfile, playerMode, mobilePreview, noPerfHints bool
 	var profilerBin string
 	cmd := &cobra.Command{
 		Use:   "test",
@@ -48,6 +48,7 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 			if err := m.Validate(); err != nil {
 				return err
 			}
+			emitPerfHints(out, dir, m, noPerfHints)
 			fsys, closeFS, err := openBuild(filepath.Join(dir, m.Build.Dir))
 			if err != nil {
 				return err
@@ -123,6 +124,7 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 	cmd.Flags().BoolVar(&noProfile, "no-profile", false, "do not start the eBPF profiler")
 	cmd.Flags().BoolVar(&playerMode, "player", false, "serve a production-like player shell with iframe sandbox/allow")
 	cmd.Flags().BoolVar(&mobilePreview, "mobile", false, "phone-style shell preview (requires --player)")
+	cmd.Flags().BoolVar(&noPerfHints, "no-perf-hints", false, "suppress performance hint warnings")
 	cmd.Flags().StringVar(&profilerBin, "profiler", "", "path to vapour-profiler (default: $VAPOUR_PROFILER, next to vapour, then PATH)")
 	return cmd
 }
