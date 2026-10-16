@@ -35,7 +35,7 @@ func newRoot() *cobra.Command {
 		Version:       Version,
 	}
 	root.PersistentFlags().StringVar(&apiFlag, "api", "", "API base URL (default: saved login, or "+config.DefaultAPI+")")
-	root.AddCommand(newLogin(), newLogout(), newWhoami(), newCreate(), newTemplate(), newPublish(), newStore(), newBuild(), newTest(), newPerf(), newController(), newUpdate())
+	root.AddCommand(newLogin(), newLogout(), newWhoami(), newCreate(), newTemplate(), newPublish(), newStore(), newBuild(), newTest(), newPerf(), newLLM(), newController(), newUpdate())
 	return root
 }
 

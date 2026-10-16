@@ -20,3 +20,8 @@ Registering first means nothing is left on disk if the server refuses.
 
 Templates: `internal/scaffold/templates/<engine>/` (README + engine starter files) and the shared `_store/store/`
 (`page.json`, `page.schema.json`, `template.md.tmpl`, README).
+
+Scaffold READMEs include an assistant hint: `For AI assistants: run vapour llm`.
+Unity and Bevy templates also include quit bridges for hosted player behavior:
+- Unity: `Vapour.VapourBridge.Quit()` → `window.vapour.quit()` when available.
+- Bevy: web exit path calls `window.vapour.quit()` when available.

@@ -11,7 +11,8 @@
     - manual `workflow_dispatch` input overrides automatic bump;
   - skips tag creation when `HEAD` already has a `v*` tag (idempotent reruns);
   - creates and pushes an annotated tag for branch/manual runs, then runs goreleaser in the same job;
-  - runs `bash scripts/sync-llm.sh || echo 'llm sync skipped'` when script exists, before goreleaser.
+  - runs `bash scripts/sync-llm.sh || echo 'llm sync skipped'` when script exists, before goreleaser;
+  - runs goreleaser as `release --clean --skip=validate` because `sync-llm.sh` can refresh tracked fallback text without committing.
 - Tag pushes (`v*`) still run release job; in that path the workflow does not create a second tag.
 - Goreleaser (`.goreleaser.yaml`): linux/darwin/windows × amd64/arm64, archives `vapour_<version>_<os>_<arch>.tar.gz`
   (zip on Windows), writes `checksums.txt`, changelog sorted ascending, and injects runtime version via
