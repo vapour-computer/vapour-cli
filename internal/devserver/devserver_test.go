@@ -139,6 +139,25 @@ func TestReport(t *testing.T) {
 	}
 }
 
+func TestRecords(t *testing.T) {
+	var got RecordsBatch
+	h := Handler(Options{FS: site(), Telemetry: true, OnRecords: func(b RecordsBatch) { got = b }})
+	body := `{"frames":[{"durationMs":16.7,"timeMs":1000,"spike":false,"epochMs":10}],"metrics":{"timeMs":1000,"epochMs":10,"values":{"fps":60,"jsHeapBytes":123}}}`
+
+	if w := get(t, h, "POST", recordsPath, map[string]string{"Origin": "http://evil.example"}, body); w.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin records accepted: %d", w.Code)
+	}
+	if w := get(t, h, "GET", recordsPath, nil, ""); w.Code != http.StatusForbidden {
+		t.Fatalf("GET records accepted: %d", w.Code)
+	}
+	if w := get(t, h, "POST", recordsPath, map[string]string{"Origin": "http://example.com"}, body); w.Code != http.StatusNoContent {
+		t.Fatalf("same-origin records rejected: %d", w.Code)
+	}
+	if len(got.Frames) != 1 || got.Metrics == nil {
+		t.Fatalf("records = %+v", got)
+	}
+}
+
 func TestInjectFallbacks(t *testing.T) {
 	if s := string(inject([]byte("<body>x</body>"))); s != "<body>x"+scriptTag+"</body>" {
 		t.Fatalf("body fallback: %s", s)
