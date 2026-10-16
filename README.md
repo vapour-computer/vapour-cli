@@ -26,6 +26,7 @@ vapour create "My Game" --engine godot
 vapour template godot "My Other Game" # clone org template, remove .git, initialize Vapour files
 cd my-game
 # export your game for Web into build/web/ (needs an index.html)
+vapour perf                          # optional: engine-specific web performance guidance + hints
 vapour publish
 ```
 
@@ -52,6 +53,11 @@ dashboard opens as a second tab and CPU and memory capture starts automatically.
 stops everything and deletes the temporary profile. Point the CLI at the profiler with `--profiler PATH` or
 `VAPOUR_PROFILER`, or place it next to the `vapour` binary; if it or a Chromium-family browser is missing, `vapour test` says so and carries on with the FPS overlay.
 Use `--no-profile` to skip it.
+
+`vapour build`, `vapour test`, and `vapour publish` print non-fatal performance hints from your project/build files.
+Use `--no-perf-hints` to suppress them.
+
+Use `vapour perf --engine godot|unity|bevy` (or omit `--engine` to use `vapour.toml`) for focused guidance and findings.
 
 `vapour create --from <git-url>` clones a sample game instead of scaffolding. `vapour publish --dry-run` checks and
 zips your build without uploading. In CI, set `VAPOUR_TOKEN` instead of running `login`.
