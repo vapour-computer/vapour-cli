@@ -19,7 +19,7 @@ split_warn_mib = 1024        # warn about files above this size
 [store]                      # all optional, relative to the game folder
 page = "store/page.json"
 content = "store/template.md"
-notes = ""                   # release notes (Markdown) for this version
+notes = ""                   # optional notes text in the manifest; publish still requires --notes/--notes-file
 ```
 
 `Manifest.Validate()` (used by `publish`, `test`, `build` paths) checks: title non-empty, engine in `Engines`,

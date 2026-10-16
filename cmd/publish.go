@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
@@ -27,8 +28,8 @@ func newPublish() *cobra.Command {
 		Use:   "publish",
 		Short: "Publish a new version: store page, images, trailer and your web build",
 		Long: `Publish checks everything first, then uploads the store page (text, banner, screenshots, trailer) and
-your web export as a new version. Each version can be published once; bump "version" in vapour.toml
-(or pass --version) for the next release. Release notes come from --notes, --notes-file or store.notes.`,
+your web export as a new version. Each version can be published once, so pass a new --version each release.
+Release notes are required with --notes or --notes-file.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
@@ -36,9 +37,10 @@ your web export as a new version. Each version can be published once; bump "vers
 			if err != nil {
 				return err
 			}
-			if version != "" {
-				m.Project.Version = version
+			if version == "" {
+				return fmt.Errorf("--version is required (e.g. --version 0.3.1)")
 			}
+			m.Project.Version = version
 			if err := m.Validate(); err != nil {
 				return err
 			}
@@ -50,7 +52,7 @@ your web export as a new version. Each version can be published once; bump "vers
 					return err
 				}
 			}
-			releaseNotes, err := resolveNotes(notes, notesFile, bundle)
+			releaseNotes, err := resolveNotes(notes, notesFile)
 			if err != nil {
 				return err
 			}
@@ -58,9 +60,6 @@ your web export as a new version. Each version can be published once; bump "vers
 			// Resolve the build: a folder is checked and zipped; a .zip is uploaded as is.
 			buildPath := filepath.Join(dir, m.Build.Dir)
 			if chunked {
-				if releaseNotes != "" {
-					return fmt.Errorf("experimental chunk publish does not yet support release notes")
-				}
 				cache, err := os.MkdirTemp("", "vapour-chunks-*")
 				if err != nil {
 					return err
@@ -171,7 +170,7 @@ your web export as a new version. Each version can be published once; bump "vers
 			if err != nil {
 				var ae *api.Error
 				if errors.As(err, &ae) && ae.Code == "version_exists" {
-					return fmt.Errorf("version %s is already published. Bump \"version\" in vapour.toml (or pass --version) and run publish again", m.Project.Version)
+					return fmt.Errorf("version %s is already published. Pass a new --version and run publish again", m.Project.Version)
 				}
 				return err
 			}
@@ -180,9 +179,9 @@ your web export as a new version. Each version can be published once; bump "vers
 		},
 	}
 	cmd.Flags().StringVar(&dir, "dir", ".", "game folder containing vapour.toml")
-	cmd.Flags().StringVar(&version, "version", "", "override project.version for this publish")
-	cmd.Flags().StringVar(&notes, "notes", "", "release notes (Markdown) for this version")
-	cmd.Flags().StringVar(&notesFile, "notes-file", "", "read the release notes (Markdown) from a file")
+	cmd.Flags().StringVar(&version, "version", "", "version to publish (required; e.g. 0.3.1)")
+	cmd.Flags().StringVar(&notes, "notes", "", "release notes (Markdown); required unless --notes-file is used")
+	cmd.Flags().StringVar(&notesFile, "notes-file", "", "read release notes (Markdown) from a file; required unless --notes is used")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "check and zip everything, but do not upload")
 	cmd.Flags().BoolVar(&skipStore, "skip-store", false, "publish the build only; leave the store page as it is")
 	cmd.Flags().BoolVar(&noPerfHints, "no-perf-hints", false, "suppress performance hint warnings")
@@ -190,18 +189,28 @@ your web export as a new version. Each version can be published once; bump "vers
 	return cmd
 }
 
-// resolveNotes picks the release notes: --notes-file, then --notes, then store.notes from vapour.toml.
-func resolveNotes(inline, file string, b *storepage.Bundle) (string, error) {
+// resolveNotes validates and reads required release notes from exactly one source.
+func resolveNotes(inline, file string) (string, error) {
+	const required = `release notes are required: pass --notes "..." or --notes-file CHANGELOG.md`
+	if inline != "" && file != "" {
+		return "", fmt.Errorf("pass exactly one of --notes or --notes-file")
+	}
+	if inline == "" && file == "" {
+		return "", fmt.Errorf(required)
+	}
 	s := inline
 	if file != "" {
 		raw, err := os.ReadFile(file)
 		if err != nil {
-			return "", fmt.Errorf("release notes: %w", err)
+			return "", fmt.Errorf("release notes file %q: %w", file, err)
 		}
 		s = string(raw)
 	}
-	if s == "" && b != nil {
-		s = b.Notes
+	if strings.TrimSpace(s) == "" {
+		if file != "" {
+			return "", fmt.Errorf("release notes file %q is empty", file)
+		}
+		return "", fmt.Errorf(required)
 	}
 	if utf8.RuneCountInString(s) > storepage.MaxNotes {
 		return "", fmt.Errorf("release notes have %d characters; the limit is %d", utf8.RuneCountInString(s), storepage.MaxNotes)

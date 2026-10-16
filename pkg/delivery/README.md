@@ -1,6 +1,6 @@
 # Experimental delivery v1
 
-Opt in with `vapour publish --experimental-chunks`. Default publishing remains ZIP.
+Opt in with `vapour publish --experimental-chunks --version 0.1.0 --notes "First release"`. Default publishing remains ZIP.
 The local POC implements this protocol; the deployed API does not yet implement it.
 Identity encoding only: zstd negotiation/decoder integration is planned.
 

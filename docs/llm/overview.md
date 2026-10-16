@@ -4,7 +4,7 @@
 driven by a per-game `vapour.toml` (see [manifest.md](manifest.md)).
 
 ## Typical flow
-`vapour login` → `vapour create` (or `vapour template`) → `vapour build` (or export manually) → `vapour test` → `vapour publish`.
+`vapour login` → `vapour create` (or `vapour template`) → `vapour build` (or export manually) → `vapour test` → `vapour publish --version <semver> --notes "..."`.
 
 ## Packages (`internal/` unless noted)
 | Package | Role |

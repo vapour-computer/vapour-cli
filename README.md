@@ -27,7 +27,7 @@ vapour template godot "My Other Game" # clone org template, remove .git, initial
 cd my-game
 # export your game for Web into build/web/ (needs an index.html)
 vapour perf                          # optional: engine-specific web performance guidance + hints
-vapour publish
+vapour publish --version 0.1.0 --notes "First release"
 ```
 
 ### Update
@@ -59,8 +59,8 @@ Use `--no-perf-hints` to suppress them.
 
 Use `vapour perf --engine godot|unity|bevy` (or omit `--engine` to use `vapour.toml`) for focused guidance and findings.
 
-`vapour create --from <git-url>` clones a sample game instead of scaffolding. `vapour publish --dry-run` checks and
-zips your build without uploading. In CI, set `VAPOUR_TOKEN` instead of running `login`.
+`vapour create --from <git-url>` clones a sample game instead of scaffolding. `vapour publish --dry-run --version 0.1.0 --notes "Dry run"`
+checks and zips your build without uploading. In CI, set `VAPOUR_TOKEN` instead of running `login`.
 
 `vapour template <engine> <name>` clones official template repos (`bevy`, `godot`, `unity`) from GitHub
 (default org: `vapour-computer`), removes `.git`, then writes `vapour.toml` and `store/` files.
@@ -81,12 +81,12 @@ Put images and the trailer in `store/`, name them under `media` in `page.json`, 
 ```sh
 vapour store check      # validate text, JSON and media without uploading
 vapour store push       # update only the store page
-vapour publish --notes "What changed"   # store page + a new version of your build
+vapour publish --version 0.2.0 --notes "What changed"   # store page + a new version of your build
 ```
 
 Banner: PNG/JPEG/WebP, at least 960x300 and 2:1 or wider, 4 MiB. Cover: at least 460x215, 2 MiB. Up to 8 screenshots (at least
-640x360, 4 MiB each). Trailer: MP4 or WebM, 30 MiB. Files are checked by content, not by name. Each version can be published once:
-bump `version` in `vapour.toml` for the next release. Players see only published games.
+640x360, 4 MiB each). Trailer: MP4 or WebM, 30 MiB. Files are checked by content, not by name. Each version can be published once;
+pass a new `--version` each release. Players see only published games.
 
 ### vapour.toml
 
@@ -108,7 +108,7 @@ on_quit = "store"      # store (default) | home | reload | stay
 [store]
 page = "store/page.json"       # JSON template: details, media files, layout
 content = "store/template.md"  # Markdown text of the store page
-notes = ""                     # optional: Markdown release notes for this version
+notes = ""                     # optional text you can keep in the manifest (publish requires --notes/--notes-file)
 ```
 
 ### Phones: orientation and touch controls
