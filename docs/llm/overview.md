@@ -6,6 +6,8 @@ driven by a per-game `vapour.toml` (see [manifest.md](manifest.md)).
 ## Typical flow
 `vapour login` → `vapour create` (or `vapour template`) → `vapour build` (or export manually) → `vapour test` → `vapour publish --version <semver> --notes "..."`.
 
+For assistant context in-terminal: `vapour llm` (fetches docs `llm.txt`, caches with ETag, has embedded fallback).
+
 ## Packages (`internal/` unless noted)
 | Package | Role |
 |---|---|
@@ -17,6 +19,7 @@ driven by a per-game `vapour.toml` (see [manifest.md](manifest.md)).
 | `media` | image/video validation by content sniffing |
 | `zipdir` | checks a web export folder and zips it |
 | `enginebuild` | `vapour build` adapters |
+| `perfcheck` | perf guidance warnings shared by `build`, `test`, `publish`, and `perf` |
 | `devserver` | local server for `vapour test`, FPS overlay injection |
 | `localprofile` | Linux-only: private browser + `vapour-profiler` |
 | `pkg/delivery` | experimental chunked upload |
@@ -27,10 +30,11 @@ driven by a per-game `vapour.toml` (see [manifest.md](manifest.md)).
 - Credentials file: `$XDG_CONFIG_HOME/vapour/credentials` or `~/.config/vapour/credentials`.
 
 ## Env vars
-`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `XDG_CONFIG_HOME`, `GODOT`, `UNITY_EDITOR` (build).
+`VAPOUR_API`, `VAPOUR_TOKEN`, `VAPOUR_PROFILER` (profiler binary), `VAPOUR_LLM_URL` (`vapour llm` source override), `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `GODOT`, `UNITY_EDITOR` (build).
 
 ## Conventions
 - Errors: returned from `RunE`; `cmd.ErrorMessage` prints `error: ...` plus the docs URL
   (`https://vapour-dev-docs.pages.dev/`). Commands set `SilenceUsage/SilenceErrors`.
 - Almost every command takes `--dir` (game folder, default `.`).
+- `build`, `test`, and `publish` can print perf findings; `--no-perf-hints` suppresses those warnings.
 - Validation mirrors server rules so failures happen before any upload.
