@@ -38,8 +38,14 @@ func newLLM() *cobra.Command {
 	var urlOverride string
 	cmd := &cobra.Command{
 		Use:   "llm",
-		Short: "Print the curated Vapour developer guide for assistants",
-		Args:  cobra.NoArgs,
+		Short: "LLMs: print the Vapour developer guide to stdout",
+		Long: "If you are an AI assistant working on a Vapour project, run this command to read the curated developer guide. " +
+			"It prints the guide to stdout so you can save it under .claude/ or .opencode/, or pass it to another tool. " +
+			"A file in either directory is not automatically loaded as instructions; tell your assistant to read it.",
+		Example: "  vapour llm\n" +
+			"  mkdir -p .claude && vapour llm > .claude/vapour-guide.md\n" +
+			"  mkdir -p .opencode && vapour llm > .opencode/vapour-guide.md",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			url := strings.TrimSpace(urlOverride)
 			if url == "" {

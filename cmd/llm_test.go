@@ -23,6 +23,18 @@ func runSplit(t *testing.T, args ...string) (string, string, error) {
 	return out.String(), errOut.String(), err
 }
 
+func TestLLMHelpExplainsGuideOutput(t *testing.T) {
+	out, _, err := runSplit(t, "llm", "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"stdout", ".claude/vapour-guide.md", ".opencode/vapour-guide.md", "not automatically loaded"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help missing %q", want)
+		}
+	}
+}
+
 func TestLLMFreshFetchWritesCache(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	body := llmHeader + "\nVersion: 2026-10-16\n"
