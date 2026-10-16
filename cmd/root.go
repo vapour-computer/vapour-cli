@@ -37,6 +37,21 @@ func newRoot() *cobra.Command {
 		SilenceErrors: true,
 		Version:       Version,
 	}
+	defaultHelp := root.HelpFunc()
+	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if cmd == root {
+			out := cmd.OutOrStdout()
+			blue := ""
+			reset := ""
+			if file, ok := out.(*os.File); ok {
+				if info, err := file.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
+					blue, reset = "\x1b[34m", "\x1b[0m"
+				}
+			}
+			fmt.Fprintf(out, "       %s.  : .\n        ' .%s\n  vapo%sur%s\n\n", blue, reset, blue, reset)
+		}
+		defaultHelp(cmd, args)
+	})
 	root.PersistentFlags().StringVar(&apiFlag, "api", "", "API base URL (default: saved login, or "+config.DefaultAPI+")")
 	root.PersistentFlags().BoolVar(&allowCustomAPI, "allow-custom-api", false, "allow non-default API hosts (unsafe: tokens are sent to that host)")
 	root.PersistentFlags().BoolVar(&allowInsecureHTTP, "allow-insecure-http", false, "allow plain HTTP only for localhost")
