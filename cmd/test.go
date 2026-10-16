@@ -3,7 +3,10 @@ package cmd
 import (
 	"archive/zip"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -98,6 +101,11 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 						select {
 						case <-sess.Done():
 							time.Sleep(500 * time.Millisecond) // let the page's final report arrive
+							if path, err := saveProfilerReport(dir, sess.DashboardURL); err != nil {
+								fmt.Fprintf(out, "Profiler JSON report not saved: %v\n", err)
+							} else {
+								fmt.Fprintf(out, "Profiler JSON report: %s\n", path)
+							}
 							_ = l.Close()
 						case <-ctx.Done():
 						}
@@ -189,4 +197,61 @@ func readMobilePreviewSettings(dir string) (orientation string, renderScale floa
 		renderScale = *raw.Mobile.RenderScale
 	}
 	return orientation, renderScale, raw.Mobile.MaxDPR
+}
+
+func profilerReportURL(dashboardURL string) (string, error) {
+	u, err := url.Parse(dashboardURL)
+	if err != nil {
+		return "", err
+	}
+	q, err := url.ParseQuery(u.Fragment)
+	if err != nil {
+		return "", err
+	}
+	token := q.Get("token")
+	if token == "" {
+		return "", fmt.Errorf("missing dashboard token")
+	}
+	u.Path = "/api/report"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+func saveProfilerReport(projectDir, dashboardURL string) (string, error) {
+	reportURL, err := profilerReportURL(dashboardURL)
+	if err != nil {
+		return "", err
+	}
+	du, _ := url.Parse(dashboardURL)
+	q, _ := url.ParseQuery(du.Fragment)
+	token := q.Get("token")
+	req, err := http.NewRequest(http.MethodGet, reportURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("%s: %s", resp.Status, string(body))
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 60<<20))
+	if err != nil {
+		return "", err
+	}
+	outDir := filepath.Join(projectDir, ".vapour", "test-output")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return "", err
+	}
+	outPath := filepath.Join(outDir, "report.json")
+	if err := os.WriteFile(outPath, body, 0o644); err != nil {
+		return "", err
+	}
+	return outPath, nil
 }
