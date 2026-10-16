@@ -68,6 +68,9 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 			var reportOnce sync.Once
 			var bridgeMu sync.Mutex
 			var bridge *profilerBridge
+			var appendFailMu sync.Mutex
+			appendFailCount := 0
+			var appendFailLast error
 			h := devserver.Handler(devserver.Options{
 				FS:                fsys,
 				Telemetry:         telemetry,
@@ -89,7 +92,12 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 					if b == nil {
 						return
 					}
-					_ = b.append(batch)
+					if err := b.append(batch); err != nil {
+						appendFailMu.Lock()
+						appendFailCount++
+						appendFailLast = err
+						appendFailMu.Unlock()
+					}
 				},
 			})
 			l, err := devserver.Listen(port)
@@ -127,6 +135,13 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 							select {
 							case <-reportPosted:
 							case <-time.After(2 * time.Second):
+							}
+							appendFailMu.Lock()
+							count := appendFailCount
+							last := appendFailLast
+							appendFailMu.Unlock()
+							if count > 0 && last != nil {
+								fmt.Fprintf(out, "%d frame batches could not be sent to the profiler: %v\n", count, last)
 							}
 							if path, err := saveProfilerReport(dir, sess.DashboardURL); err != nil {
 								fmt.Fprintf(out, "Profiler JSON report not saved: %v\n", err)
@@ -283,7 +298,6 @@ type profilerBridge struct {
 	originMS   float64
 	hasOrigin  bool
 	lastFrame  float64
-	lastMetric float64
 	mu         sync.Mutex
 }
 
@@ -357,7 +371,7 @@ func (p *profilerBridge) relativeTime(epochMS, last float64) float64 {
 func (p *profilerBridge) append(batch devserver.RecordsBatch) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(batch.Frames) == 0 && batch.Metrics == nil {
+	if len(batch.Frames) == 0 {
 		return nil
 	}
 	p.ensureOrigin()
@@ -365,7 +379,7 @@ func (p *profilerBridge) append(batch devserver.RecordsBatch) error {
 		p.originMS = nowMS()
 		p.hasOrigin = true
 	}
-	lines := make([]string, 0, len(batch.Frames)+1)
+	lines := make([]string, 0, len(batch.Frames))
 	for _, frame := range batch.Frames {
 		timeMS := p.relativeTime(frame.EpochMS, p.lastFrame)
 		p.lastFrame = timeMS
@@ -374,19 +388,6 @@ func (p *profilerBridge) append(batch devserver.RecordsBatch) error {
 			"timeMs":     timeMS,
 			"durationMs": frame.DurationMS,
 			"spike":      frame.Spike,
-		})
-		if err != nil {
-			return err
-		}
-		lines = append(lines, string(row))
-	}
-	if batch.Metrics != nil {
-		timeMS := p.relativeTime(batch.Metrics.EpochMS, p.lastMetric)
-		p.lastMetric = timeMS
-		row, err := json.Marshal(map[string]any{
-			"type":   "metrics",
-			"timeMs": timeMS,
-			"values": batch.Metrics.Values,
 		})
 		if err != nil {
 			return err

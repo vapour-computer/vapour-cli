@@ -9,7 +9,7 @@
   var n = 0, total = 0, worst = 0, sumMs = 0;
   var last = 0, winStart = 0, winFrames = 0, fps = 0;
   var start = 0, lastFlush = 0;
-  var batchFrames = [], batchDurations = [];
+  var batchFrames = [];
 
   var box = document.createElement("div");
   box.setAttribute("data-vapour-overlay", "");
@@ -38,15 +38,6 @@
     return 1000 / (s / k);
   }
 
-  function low(durations, fraction) {
-    if (!durations.length) return 0;
-    var a = durations.slice().sort(function (x, y) { return y - x; });
-    var k = Math.max(1, Math.ceil(a.length * fraction));
-    var s = 0;
-    for (var i = 0; i < k; i++) s += a[i];
-    return 1000 / (s / k);
-  }
-
   function median(values) {
     if (!values.length) return 0;
     var a = values.slice().sort(function (x, y) { return x - y; });
@@ -55,40 +46,11 @@
 
   function sendBatch(now) {
     if (!batchFrames.length) return;
-    var sum = 0, over16 = 0, over33 = 0, max = 0;
-    for (var i = 0; i < batchDurations.length; i++) {
-      var d = batchDurations[i];
-      sum += d;
-      if (d > 16.6) over16++;
-      if (d > 33.3) over33++;
-      if (d > max) max = d;
-    }
-    var mean = sum / batchDurations.length;
-    var mem = (performance && performance.memory && Number.isFinite(performance.memory.usedJSHeapSize)) ? Math.max(0, Math.round(performance.memory.usedJSHeapSize)) : null;
-    var values = {
-      fps: mean > 0 ? 1000 / mean : null,
-      averageFps: mean > 0 ? 1000 / mean : null,
-      low1Fps: low(batchDurations, 0.01),
-      low01Fps: low(batchDurations, 0.001),
-      minFps: max > 0 ? 1000 / max : null,
-      frameTimeMs: mean,
-      over16_6MsPercent: batchDurations.length ? (over16 * 100) / batchDurations.length : null,
-      over33_3MsPercent: batchDurations.length ? (over33 * 100) / batchDurations.length : null,
-      jsHeapBytes: mem,
-      visibility: document.visibilityState === "hidden" ? "hidden" : "visible",
-      busySource: "unsupported"
-    };
     var payload = JSON.stringify({
-      frames: batchFrames,
-      metrics: {
-        timeMs: now - start,
-        epochMs: performance.timeOrigin + now,
-        values: values
-      }
+      frames: batchFrames
     });
     try { navigator.sendBeacon("/__vapour/records", payload); } catch (e) {}
     batchFrames = [];
-    batchDurations = [];
     lastFlush = now;
   }
 
@@ -106,7 +68,6 @@
       }
       recent.push(d);
       if (recent.length > 120) recent.shift();
-      batchDurations.push(d);
       batchFrames.push({ durationMs: d, timeMs: t - start, spike: spike, epochMs: performance.timeOrigin + t });
       winFrames++;
       if (!lastFlush) lastFlush = t;

@@ -1,6 +1,15 @@
 package cmd
 
-import "testing"
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/vapour-computer/vapour-cli/internal/devserver"
+)
 
 func TestProfilerReportURL(t *testing.T) {
 	u, err := profilerReportURL("http://127.0.0.1:6767/#token=abc123")
@@ -48,5 +57,44 @@ func TestProfilerToken(t *testing.T) {
 func TestProfilerReportURLNeverNeedsToken(t *testing.T) {
 	if _, err := profilerReportURL("http://127.0.0.1:6767/"); err != nil {
 		t.Fatalf("unexpected parse failure: %v", err)
+	}
+}
+
+func TestProfilerBridgeSendsFramesOnly(t *testing.T) {
+	var posted string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/status":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"metrics":{"timeMs":0}}`))
+		case "/api/records":
+			body, _ := io.ReadAll(r.Body)
+			posted = string(body)
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	b, err := newProfilerBridge(ts.URL + "/#token=test")
+	if err != nil {
+		t.Fatalf("bridge: %v", err)
+	}
+	err = b.append(devserver.RecordsBatch{Frames: []devserver.FrameRecord{{DurationMS: 16.7, EpochMS: 1000, Spike: false}}})
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if posted == "" {
+		t.Fatal("expected records POST")
+	}
+	for _, line := range strings.Split(strings.TrimSpace(posted), "\n") {
+		var v map[string]any
+		if err := json.Unmarshal([]byte(line), &v); err != nil {
+			t.Fatalf("invalid json line: %v", err)
+		}
+		if v["type"] != "frame" {
+			t.Fatalf("unexpected record type: %v", v["type"])
+		}
 	}
 }

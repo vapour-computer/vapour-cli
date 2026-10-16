@@ -9,7 +9,7 @@ Flags: `--dir`, `--port` (0 = free port), `--no-telemetry` (no FPS overlay), `--
 - FPS overlay (`internal/devserver/fps.js`): injected into `index.html` at serve time (before `</head>`), never written
   to the build folder, so `publish` cannot include it. Toggle with Ctrl+Shift+F. On tab close it POSTs a summary to
   `/__vapour/report` (same-origin only, body capped at 4 KiB); the CLI prints frames, avg fps, 1% low, worst frame.
-  It also POSTs periodic frame batches and browser metrics to `/__vapour/records`; `vapour test` forwards those to
+  It also POSTs periodic frame batches to `/__vapour/records`; `vapour test` forwards those to
   `vapour-profiler /api/records` so saved `report.json` includes frame/FPS data.
 - Profiler (Linux only, `localprofile_linux.go`): launches a Chromium-family browser (chromium, chrome, brave, edge)
   with a throwaway `--user-data-dir`, runs `vapour-profiler dashboard --pid <browser> --tree --autostart` (dashboard

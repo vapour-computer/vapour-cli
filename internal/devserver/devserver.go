@@ -47,15 +47,8 @@ type FrameRecord struct {
 	EpochMS    float64 `json:"epochMs"`
 }
 
-type MetricsRecord struct {
-	TimeMS  float64        `json:"timeMs"`
-	EpochMS float64        `json:"epochMs"`
-	Values  map[string]any `json:"values"`
-}
-
 type RecordsBatch struct {
-	Frames  []FrameRecord  `json:"frames"`
-	Metrics *MetricsRecord `json:"metrics"`
+	Frames []FrameRecord `json:"frames"`
 }
 
 // Options configures the server.
@@ -66,7 +59,7 @@ type Options struct {
 	Telemetry bool
 	// OnReport is called with the summary when a page with the overlay is closed. May be nil.
 	OnReport func(Report)
-	// OnRecords receives periodic frame and browser-metrics records from the overlay.
+	// OnRecords receives periodic frame records from the overlay.
 	OnRecords func(RecordsBatch)
 	// Player serves a local player shell with an iframe using production-like sandbox/allow attributes.
 	Player bool
