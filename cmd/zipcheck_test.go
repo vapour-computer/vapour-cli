@@ -57,6 +57,8 @@ func newFakeZipAPI(t *testing.T) *fakeZipAPI {
 
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/projects/g1":
+			io.WriteString(w, `{"id":"g1","slug":"zip-check","title":"Zip Check","releases":[]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/projects/g1/publish":
 			if err := r.ParseMultipartForm(32 << 20); err != nil {
 				t.Errorf("publish multipart: %v", err)

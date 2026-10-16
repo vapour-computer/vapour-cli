@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,6 +123,9 @@ Release notes are required with --notes or --notes-file.`,
 				if err := ensureProject(cmd.Context(), c, m, dir); err != nil {
 					return err
 				}
+				if err := checkVersionFree(cmd.Context(), c, m.Project.ID, m.Project.Version); err != nil {
+					return err
+				}
 				if bundle != nil {
 					if err := pushStore(cmd.Context(), out, c, m, bundle); err != nil {
 						return err
@@ -173,6 +177,11 @@ Release notes are required with --notes or --notes-file.`,
 			if err := ensureProject(cmd.Context(), c, m, dir); err != nil {
 				return err
 			}
+			// A version can be published once: check existing releases before uploading
+			// anything, so repeats fail fast.
+			if err := checkVersionFree(cmd.Context(), c, m.Project.ID, m.Project.Version); err != nil {
+				return err
+			}
 			// Store page first: if its media is rejected we stop before a version is used up.
 			if bundle != nil {
 				if err := pushStore(cmd.Context(), out, c, m, bundle); err != nil {
@@ -208,6 +217,20 @@ Release notes are required with --notes or --notes-file.`,
 	cmd.Flags().BoolVar(&noPerfHints, "no-perf-hints", false, "suppress performance hint warnings")
 	cmd.Flags().BoolVar(&chunked, "experimental-chunks", false, "use experimental v1 chunk protocol (requires a compatible server)")
 	return cmd
+}
+
+// checkVersionFree rejects a version that is already published before anything is uploaded.
+func checkVersionFree(ctx context.Context, c *api.Client, projectID, version string) error {
+	g, err := c.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, r := range g.Releases {
+		if r.Version == version {
+			return fmt.Errorf("version %s is already published. Pass a new --version and run publish again", version)
+		}
+	}
+	return nil
 }
 
 // resolveNotes validates and reads required release notes from exactly one source.

@@ -152,6 +152,15 @@ func (c *Client) CreateProject(ctx context.Context, req CreateProjectRequest) (*
 	return &g, nil
 }
 
+// GetProject fetches the owner's view of a project, including its published releases.
+func (c *Client) GetProject(ctx context.Context, id string) (*Game, error) {
+	var g Game
+	if err := c.do(ctx, http.MethodGet, "/projects/"+id, nil, "", &g); err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
 // File is one multipart upload part.
 type File struct {
 	Path string

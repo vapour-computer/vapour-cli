@@ -18,12 +18,13 @@ import (
 
 // fakeAPI implements just enough of the contract for the CLI flow and records what it receives.
 type fakeAPI struct {
-	mu        sync.Mutex
-	versions  map[string]bool
-	seen      map[string]string
-	storeMeta map[string]any
-	storeFlds []string
-	srv       *httptest.Server
+	mu          sync.Mutex
+	versions    map[string]bool
+	seen        map[string]string
+	seenPublish []string
+	storeMeta   map[string]any
+	storeFlds   []string
+	srv         *httptest.Server
 }
 
 func newFakeAPI(t *testing.T) *fakeAPI {
@@ -45,6 +46,16 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 			json.NewDecoder(r.Body).Decode(&b)
 			w.WriteHeader(201)
 			json.NewEncoder(w).Encode(map[string]string{"id": "g1", "slug": b["slug"], "title": b["title"], "engine": b["engine"], "status": "draft"})
+		case "/projects/g1":
+			if r.Method != http.MethodGet {
+				w.WriteHeader(405)
+				return
+			}
+			rels := make([]map[string]string, 0, len(f.versions))
+			for v := range f.versions {
+				rels = append(rels, map[string]string{"version": v})
+			}
+			json.NewEncoder(w).Encode(map[string]any{"id": "g1", "slug": "my-game", "title": "My Game", "status": "draft", "releases": rels})
 		case "/projects/g1/store":
 			if r.Method != http.MethodPut {
 				w.WriteHeader(405)
@@ -74,6 +85,7 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 			}
 			f.versions[v] = true
 			f.seen["version"], f.seen["notes"] = v, r.FormValue("notes")
+			f.seenPublish = append(f.seenPublish, v)
 			file, _, err := r.FormFile("build")
 			if err != nil {
 				t.Errorf("build part: %v", err)
@@ -211,6 +223,9 @@ func TestLoginCreateStorePublishFlow(t *testing.T) {
 	api.storeMeta = nil
 	if _, err := run(t, "publish", "--dir", game, "--version", "0.3.0", "--notes", "Skip store", "--skip-store"); err != nil || api.storeMeta != nil {
 		t.Errorf("skip-store: %v meta=%v", err, api.storeMeta)
+	}
+	if got := strings.Join(api.seenPublish, ","); got != "0.2.0,0.3.0" {
+		t.Errorf("versions that reached the publish endpoint: %q (the blocked repeat must not upload)", got)
 	}
 	// store push updates only the page.
 	if out, err := run(t, "store", "push", "--dir", game); err != nil || !strings.Contains(out, "Store page updated") {
