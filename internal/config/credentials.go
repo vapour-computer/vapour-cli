@@ -4,14 +4,18 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
 // DefaultAPI is used when neither a flag, VAPOUR_API nor saved credentials set one.
 const DefaultAPI = "https://api.vapour.ink"
+
+const DefaultAPIHost = "api.vapour.ink"
 
 type Credentials struct {
 	API   string `toml:"api,omitempty"`
@@ -110,6 +114,27 @@ func ResolveAPI(flag string, c Credentials) string {
 		}
 	}
 	return DefaultAPI
+}
+
+func ValidateAPI(raw string, allowCustom, allowInsecureHTTP bool) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("invalid API URL %q", raw)
+	}
+	host := strings.ToLower(u.Hostname())
+	if u.Scheme != "https" {
+		local := host == "localhost" || host == "127.0.0.1" || host == "::1"
+		if !(u.Scheme == "http" && (local || allowInsecureHTTP)) {
+			return "", fmt.Errorf("API URL must use https (or http://localhost with --allow-insecure-http)")
+		}
+	}
+	if !allowCustom && host != DefaultAPIHost && host != "localhost" && host != "127.0.0.1" && host != "::1" {
+		return "", fmt.Errorf("custom API host %q is blocked; pass --allow-custom-api to send tokens to non-default hosts", u.Host)
+	}
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
 }
 
 // ResolveToken picks the token: VAPOUR_TOKEN (for CI), then saved credentials.

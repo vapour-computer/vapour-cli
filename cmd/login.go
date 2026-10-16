@@ -38,9 +38,13 @@ func newLogin() *cobra.Command {
 				return err
 			}
 			base := config.ResolveAPI(apiFlag, saved)
+			validated, err := config.ValidateAPI(base, allowCustomAPI || os.Getenv("VAPOUR_ALLOW_CUSTOM_API") == "1", allowInsecureHTTP || os.Getenv("VAPOUR_ALLOW_INSECURE_HTTP") == "1")
+			if err != nil {
+				return err
+			}
 			who := ""
 			if !noVerify {
-				me, err := api.New(base, token, "vapour-cli/"+Version).Me(cmd.Context())
+				me, err := api.New(validated, token, "vapour-cli/"+Version).Me(cmd.Context())
 				if err != nil {
 					return fmt.Errorf("token check failed: %w", err)
 				}
@@ -48,7 +52,7 @@ func newLogin() *cobra.Command {
 			}
 			creds := config.Credentials{Token: token}
 			if apiFlag != "" || os.Getenv("VAPOUR_API") != "" || saved.API != "" {
-				creds.API = base
+				creds.API = validated
 			}
 			if err := config.Save(creds); err != nil {
 				return err

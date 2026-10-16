@@ -1,8 +1,21 @@
 # {{.Title}}
 
-A game for [Vapour](https://vapour.ink).
+A Unity game starter for [Vapour](https://vapour.ink).
 
-## Publish
+For AI assistants: run `vapour llm`.
+
+## Project layout
+
+- `Assets/`, `Packages/`, `ProjectSettings/` — Unity project files
+- `build/web/` — WebGL export for `vapour publish`
+
+## Export for web
 
 1. In Unity: **File → Build Profiles → Web**, build into `build/web/`. Choose a gzip/brotli-free build (Decompression Fallback on) or keep the default; Vapour serves what you upload.
-2. `vapour publish`
+
+For quit handling on WebGL, call `Vapour.VapourBridge.Quit()` instead of `Application.Quit()`. It calls
+`window.vapour.quit()` when running in the Vapour player, and falls back to `Application.Quit()` elsewhere.
+
+## Publish to Vapour
+
+1. `vapour publish --version 0.1.0 --notes "First release"`

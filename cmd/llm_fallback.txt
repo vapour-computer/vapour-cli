@@ -1,0 +1,245 @@
+# Vapour developer guide for LLMs
+Version: 2026-10-16
+Source: https://vapour-dev-docs.pages.dev/llm.txt
+
+Status terms in this file:
+- Released: on vapour-cli main.
+- Preview: merged in source but not guaranteed in a published release yet.
+
+1) What Vapour is and the normal flow
+
+Vapour is a browser-game publishing flow around one per-game manifest (`vapour.toml`), a store page bundle (`store/page.json` + `store/template.md`), and a web export folder (or prebuilt zip).
+
+Typical flow:
+1. `vapour login --token vpr_...`
+2. `vapour create "My Game" --engine godot` (or `vapour template <engine> "My Game"`)
+3. Export/build to `build/web/` so `index.html` exists there
+4. `vapour test`
+5. `vapour publish --version 0.1.0 --notes "First release"`
+
+Rules that often matter:
+- `vapour publish` requires `--version` and exactly one of `--notes` or `--notes-file`, including dry runs.
+- Each game version can be published once; publishing the same version again returns a version-exists error.
+- `vapour publish --dry-run` validates and packs locally, without API auth/upload.
+- Store push and publish can register a project and write `project.id` into `vapour.toml` on first server registration.
+
+Getting this file:
+- CLI: `vapour llm`
+- Options: `--refresh`, `--offline`, `--url <URL>`
+- Env override: `VAPOUR_LLM_URL`
+- Direct URL: `https://vapour-dev-docs.pages.dev/llm.txt`
+
+2) `vapour.toml` reference (fields assistants should use)
+
+`[project]`
+- `title` (required)
+- `engine` (required): `godot | unity | bevy | other`
+- `version` (required)
+- `slug` (usually auto-written by create/template)
+- `id` (server id, written by CLI)
+- `platform` (preview): `desktop | native-mobile | port`
+
+`[build]`
+- `dir` (required): web export folder with `index.html`, or a `.zip`
+- `command`: `auto | custom | none`
+- `args` (required for `custom`)
+- `boot` (glob list)
+- `split_warn_mib`
+- `pointer_lock`: `auto | pause | off`
+
+Pointer-lock behavior:
+- Folder publish can inject a pointer-lock helper script into uploaded `index.html` (not your source files).
+- `auto`: retry pointer lock on real mouse click.
+- `pause`: same, plus sends Escape on lock loss (pause-menu friendly).
+- Script skips touch-only interaction paths and filters short startup movement spikes after lock is regained.
+- `off`: do not inject.
+- Prebuilt `.zip` uploads are not modified.
+
+`[runtime]` (preview metadata)
+- `threads` (bool)
+- `webgpu` (bool)
+- `coep`: `require-corp | credentialless`
+- `entry`: relative safe path only (not absolute, no `..`)
+- `on_quit`: `store | home | reload | stay`
+
+`on_quit` notes:
+- This is behavior mode metadata, not a URL.
+- Use only the four enum values above.
+
+`[mobile]` (preview)
+- `orientation`: `any | landscape | portrait`
+- `render_scale`: `0.25..1.0`
+- `max_dpr`: `> 0`
+- `rotate_message` or `rotate_message_file` (mutually exclusive)
+
+`[controller]` (preview)
+- `mode`: `keyboard-map | dedicated` (`action-map` alias maps to dedicated)
+- `[[controller.controls]]` uses `type = button | dpad | joystick`
+- Control geometry is normalized fractions (`x`,`y`,`w`,`h` in 0..1 ranges; `w/h > 0`)
+
+Keyboard-map essentials:
+- Buttons use `key`.
+- Dpad/joystick require `up`, `down`, `left`, `right`.
+- Joystick tuning: `deadzone`, `sensitivity`, `repeat_hz` (or legacy `pwm_hz`, equal values if both set).
+- Map the in-game menu action to `Escape` (commonly as `id = "menu"` with `key = "Escape"`) so phone players can open pause/settings consistently.
+
+`[store]`
+- `page` path to `store/page.json`
+- `content` path to `store/template.md`
+- `notes` exists for compatibility but `vapour publish` ignores it; pass notes via flags.
+
+3) Engine-specific build/runtime facts
+
+Godot 4.7
+- Export preset must be named exactly `Web`.
+- Target browser path is Compatibility/WebGL2; Godot web path does not provide WebGPU.
+- Set `variant/thread_support=true` in `export_presets.cfg` for threaded exports.
+- Use `.web` overrides for web-specific rendering/perf settings. Keys used in merged guidance:
+  `window/hdr/request_hdr_output.web=false`
+  `viewport/hdr_2d.web=false`
+  `anti_aliasing/quality/use_debanding.web=false`
+  `textures/default_filters/anisotropic_filtering_level.web=1`
+  `scaling_3d/mode.web=0`
+  `scaling_3d/scale.web=0.75`
+  `lights_and_shadows/positional_shadow/atlas_size.web=1024`
+  `lights_and_shadows/directional_shadow/size.web=2048`
+- For 3D projects prefer Jolt Physics (`3d/physics_engine = "Jolt Physics"`).
+- Custom speed-focused template build line:
+  `scons platform=web target=template_release production=yes optimize=speed lto=full threads=yes`
+- Build custom template with exact emsdk version listed in Godot docs for your engine version, then set:
+  `custom_template/release="res://../templates/godot.web.template_release.wasm32.zip"`
+- Pointer lock should activate only from real mouse click. Ignore emulated touch clicks (`device == InputEvent.DEVICE_ID_EMULATION`).
+- Do not fire shooting/action on capture click. Never auto-capture on touch-only devices.
+- Minimal real-mouse guard (from TPS tutorial):
+  `func _is_real_mouse_button_press(input_event: InputEvent) -> bool:`
+  `	if not (input_event is InputEventMouseButton):`
+  `		return false`
+  `	var mouse_event := input_event as InputEventMouseButton`
+  `	if not mouse_event.is_pressed():`
+  `		return false`
+  `	return mouse_event.device != InputEvent.DEVICE_ID_EMULATION`
+- For quit behavior inside the Vapour player, use `get_tree().quit()` and set `runtime.on_quit` mode.
+
+Unity 6
+- Build target is Web (WebGL runtime path; WebGPU can be enabled in Graphics APIs where supported).
+- Use non-development builds and Runtime Speed optimization for release output.
+- Use compressed web artifacts (Brotli/Gzip or `.unityweb`) for delivery-size/startup improvements.
+- Use the bridge quit path (`Vapour.VapourBridge.Quit()`) instead of bare `Application.Quit()` for player-integrated quit behavior.
+
+Bevy
+- Standard path uses Trunk and web output folder (`dist/` or your configured `build.dir`).
+- Recommended profile for web runtime speed: `opt-level = 3`, `lto = true`, `codegen-units = 1`.
+- For Trunk rust link, include `data-wasm-opt`.
+- `webgpu` feature is optional; keep a WebGL2-compatible fallback path for broad browser support.
+- On web exit, call the Vapour quit bridge (`window.vapour.quit()`; template also wires `vapour_quit` support).
+
+Other HTML5 engines/frameworks
+- Publish any static web export that has `index.html` and browser assets.
+- Optional quit integration: call `window.vapour.quit()` when present.
+
+4) Performance checklist (`vapour perf` and perf warnings)
+
+Run:
+- `vapour perf` (optionally `--engine godot|unity|bevy`)
+- `vapour build` / `vapour test` / `vapour publish` (all can emit perf warnings)
+- Add `--no-perf-hints` only when you intentionally want quiet output.
+
+General checks:
+- Browser hardware acceleration enabled (for Chromium-based browser: verify on `chrome://gpu`).
+- On dual-GPU systems, run browser in high-performance GPU mode.
+
+Godot checks:
+- Web thread support enabled.
+- `.web` overrides in place for expensive desktop defaults.
+- Jolt physics selected for 3D where applicable.
+- Watch large `.wasm` and `.pck` sizes; startup cost is dominated by payload and compile/decode.
+
+Unity checks:
+- Not a Development Build.
+- Runtime Speed optimization.
+- Compression enabled for data/wasm outputs; avoid unnecessary decompression fallback.
+
+Bevy checks:
+- Use web speed profile (`opt-level=3`, LTO, `codegen-units=1`).
+- Include Trunk `data-wasm-opt` setting.
+- Track wasm size; very large wasm increases startup latency.
+
+5) Publishing rules and limits
+
+CLI publishing contract:
+- `vapour publish --version <semver> --notes "..."`
+- or `vapour publish --version <semver> --notes-file <path>`
+- Exactly one notes source is allowed.
+- `--dry-run` keeps work local.
+
+Current limits (source values):
+- Build ZIP upload: 512 MiB
+- Extracted archive: 1 GiB
+- ZIP entries: 5,000
+- Store cover image: 2 MiB
+- Store page Markdown: 20,000 characters
+- Store tagline: 140 characters
+- Tags: max 5, each 1–24 characters
+
+Archive safety checks include rejecting path traversal/unsafe paths. Directory packing also rejects common native binaries and symlinks. Prebuilt zips still get server validation.
+
+Compression note:
+- At publish, eligible assets are stored Brotli-compressed when both conditions hold:
+  extension is `.wasm`, `.js`, `.pck`, `.data`, or `.json`; file size is over 1 KiB; Brotli size is at least 10% smaller.
+- Served encoding is `Content-Encoding: br` for Brotli-capable clients, with identity fallback for clients without Brotli support.
+- Versioned `/play/<slug>/v/<version>/...` non-HTML assets are cached as `public, max-age=31536000, immutable`.
+- Games published before this behavior keep old stored objects. Republish with a new `--version` to get Brotli variants.
+
+CI action status:
+- `vapour-ci` templates/action are preview-source content; verify release status before relying on `@v1` tags in production workflows.
+
+6) Testing and profiling
+
+`vapour test`
+- Serves `build.dir` on `127.0.0.1`.
+- Injects FPS overlay at serve time only (not written into build files).
+- Sends cross-origin isolation headers for threaded wasm behavior.
+- Uses a local dev player shell with `runtime.on_quit` handling and a quit panel for `stay` mode.
+
+Profiler integration (Linux path):
+- Launches private Chromium-family session.
+- Integrates with `vapour-profiler` dashboard.
+- Forwards frame batches to profiler `/api/records`.
+- Saves summary to `.vapour/test-output/report.json`.
+
+Useful follow-ups:
+- Report command: `vapour-profiler report trace.vpt -o report.json` (optional trace omission and pretty JSON modes are available in that command)
+- Dashboard export: **Download JSON** (`GET /api/report`), metrics-only with `GET /api/report?trace=0`.
+- Report format is `vp-report` version `1`; main top-level keys include:
+  `format`, `version`, `metadata`, `capture`, `frames`, `metrics`, `cpu`, `memory`, `functions`, `stacks`, `assets`, `spikes`, `probes`, `trace`.
+
+7) Phone controls and troubleshooting
+
+Phone controls quick rules:
+- Controls are rendered by the player, not baked into your game assets.
+- In `keyboard-map`, every on-screen action must map to keys your game already handles.
+- Keep layouts non-overlapping and test in a phone-sized viewport.
+- Keep a usable `Escape` path for menu/pause.
+- Stick behavior uses hysteresis: press direction at about 50% deflection, release below about 35%.
+- Each stick key press is held at least 50 ms. `repeat_hz` is polling rate and is capped at 30.
+
+Troubleshooting table (merged/common cases):
+
+| Symptom | Check/fix |
+| --- | --- |
+| `no vapour.toml in <dir> ...` | Run command from game root or pass `--dir`. |
+| `--version is required ...` | Add `--version` to every publish, including `--dry-run`. |
+| `release notes are required ...` | Pass exactly one of `--notes` or `--notes-file`; ensure non-empty text. |
+| No `index.html` / blank launch | Confirm web export folder and `build.dir` path. |
+| Native binaries/symlinks rejected | Publish browser export, not desktop artifacts. |
+| Unity build loads but does not start | Compression/header mismatch or wrong build profile; verify Web build settings. |
+| SharedArrayBuffer unavailable | Check cross-origin isolation (`COOP/COEP/CORP`) and threaded runtime assumptions. |
+| Pointer lock feels broken | Ensure click-driven capture path; use `pointer_lock = "pause"` for Escape-on-loss behavior. |
+| Phone controls do nothing | Play page must load `/__vapour/runtime.js` (runtime injection). Check page source and network tab. |
+| Touch controls do nothing | `keyboard-map` keys must match actual in-game bindings (case/spelling). |
+| Right/left stick movement feels wrong | Verify deadzone/sensitivity and key bindings first; stick hold/release thresholds are fixed hysteresis in runtime. |
+
+Assistant guardrails:
+- Do not invent CLI flags, manifest keys, engine support levels, or limits.
+- If a capability is marked preview or not released, say that explicitly.
+- Prefer exact command forms shown above.

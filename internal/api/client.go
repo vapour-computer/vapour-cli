@@ -10,9 +10,11 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Client struct {
@@ -27,8 +29,8 @@ func New(base, token, userAgent string) *Client {
 		Base:      strings.TrimRight(base, "/"),
 		Token:     token,
 		UserAgent: userAgent,
-		// No overall timeout: uploads can be large. Callers use contexts.
-		HTTP: &http.Client{Timeout: 0},
+		// Keep a high, finite timeout. Callers still provide contexts.
+		HTTP: &http.Client{Timeout: 10 * time.Minute},
 	}
 }
 
@@ -59,17 +61,17 @@ type Dev struct {
 }
 
 type Game struct {
-	ID       string `json:"id"`
-	DevUID   string `json:"dev_uid"`
-	Title    string `json:"title"`
-	Slug     string `json:"slug"`
-	Engine   string `json:"engine"`
-	Version  string `json:"version"`
-	BuildURL string `json:"build_url"`
-	CoverURL string `json:"cover_url"`
-	Status   string `json:"status"`
-	Category string `json:"category"`
-	Tagline  string `json:"tagline"`
+	ID       string    `json:"id"`
+	DevUID   string    `json:"dev_uid"`
+	Title    string    `json:"title"`
+	Slug     string    `json:"slug"`
+	Engine   string    `json:"engine"`
+	Version  string    `json:"version"`
+	BuildURL string    `json:"build_url"`
+	CoverURL string    `json:"cover_url"`
+	Status   string    `json:"status"`
+	Category string    `json:"category"`
+	Tagline  string    `json:"tagline"`
 	Releases []Release `json:"releases"`
 }
 
@@ -173,7 +175,9 @@ type Part struct {
 }
 
 // Publish uploads a build (zip) for a new version, with optional Markdown release notes, streaming the request body.
-func (c *Client) Publish(ctx context.Context, projectID, version, notes string, build File) (*PublishResponse, error) {
+// attestation is the signed zip attestation (JSON). When set, the server must re-hash the zip, check the signature and
+// reject the upload with error code zip_verification_failed on any mismatch.
+func (c *Client) Publish(ctx context.Context, projectID, version, notes string, metadata map[string]any, build File, attestation []byte) (*PublishResponse, error) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
@@ -183,6 +187,20 @@ func (c *Client) Publish(ctx context.Context, projectID, version, notes string, 
 			}
 			if notes != "" {
 				if err := mw.WriteField("notes", notes); err != nil {
+					return err
+				}
+			}
+			if len(metadata) > 0 {
+				b, err := json.Marshal(metadata)
+				if err != nil {
+					return err
+				}
+				if err := mw.WriteField("metadata", string(b)); err != nil {
+					return err
+				}
+			}
+			if len(attestation) > 0 {
+				if err := part(mw, "attestation", File{Name: "build.zip.attestation.json", Body: bytes.NewReader(attestation)}, "application/json"); err != nil {
 					return err
 				}
 			}
@@ -200,6 +218,30 @@ func (c *Client) Publish(ctx context.Context, projectID, version, notes string, 
 		return nil, err
 	}
 	return &r, nil
+}
+
+// ZipVerification is the server's record of how it checked one version's zip.
+type ZipVerification struct {
+	Status     string `json:"status"` // verified | rejected | unverified
+	SHA256     string `json:"sha256,omitempty"`
+	Size       int64  `json:"size,omitempty"`
+	KeyID      string `json:"key_id,omitempty"`
+	VerifiedAt string `json:"verified_at,omitempty"`
+	Findings   []struct {
+		Severity string `json:"severity"`
+		Code     string `json:"code"`
+		Path     string `json:"path,omitempty"`
+		Message  string `json:"message"`
+	} `json:"findings,omitempty"`
+}
+
+// VersionVerification fetches the server's zip verification record for a published version.
+func (c *Client) VersionVerification(ctx context.Context, projectID, version string) (*ZipVerification, error) {
+	var v ZipVerification
+	if err := c.do(ctx, http.MethodGet, "/projects/"+projectID+"/versions/"+url.PathEscape(version)+"/verification", nil, "", &v); err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // PutStore updates a game's store page: metadata JSON (tagline, description, category, tags, page) and media files.

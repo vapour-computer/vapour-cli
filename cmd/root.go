@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/vapour-computer/vapour-cli/internal/api"
@@ -21,18 +22,25 @@ func ErrorMessage(err error) string {
 }
 
 var apiFlag string
+var allowCustomAPI bool
+var allowInsecureHTTP bool
 
 func newRoot() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "vapour",
-		Short:         "Create and publish web games on Vapour",
-		Long:          "Create and publish web games on Vapour.\n\nDocs: " + DocsURL,
+		Use:   "vapour",
+		Short: "Create and publish web games on Vapour",
+		Long:  "Create and publish web games on Vapour.\n\nDocs: " + DocsURL,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			maybeCheckForUpdate(cmd)
+		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       Version,
 	}
 	root.PersistentFlags().StringVar(&apiFlag, "api", "", "API base URL (default: saved login, or "+config.DefaultAPI+")")
-	root.AddCommand(newLogin(), newLogout(), newWhoami(), newCreate(), newPublish(), newStore())
+	root.PersistentFlags().BoolVar(&allowCustomAPI, "allow-custom-api", false, "allow non-default API hosts (unsafe: tokens are sent to that host)")
+	root.PersistentFlags().BoolVar(&allowInsecureHTTP, "allow-insecure-http", false, "allow plain HTTP only for localhost")
+	root.AddCommand(newLogin(), newLogout(), newWhoami(), newCreate(), newTemplate(), newPublish(), newStore(), newBuild(), newTest(), newPerf(), newLLM(), newController(), newUpdate(), newScan(), newVerify())
 	return root
 }
 
@@ -48,5 +56,9 @@ func client(requireToken bool) (*api.Client, error) {
 	if requireToken && tok == "" {
 		return nil, fmt.Errorf("not logged in: run `vapour login --token <token>` (create a token in your dashboard) or set VAPOUR_TOKEN")
 	}
-	return api.New(config.ResolveAPI(apiFlag, c), tok, "vapour-cli/"+Version), nil
+	base, err := config.ValidateAPI(config.ResolveAPI(apiFlag, c), allowCustomAPI || os.Getenv("VAPOUR_ALLOW_CUSTOM_API") == "1", allowInsecureHTTP || os.Getenv("VAPOUR_ALLOW_INSECURE_HTTP") == "1")
+	if err != nil {
+		return nil, err
+	}
+	return api.New(base, tok, "vapour-cli/"+Version), nil
 }

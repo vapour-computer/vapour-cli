@@ -1,0 +1,2 @@
+vapour-zip-attestation-v1
+{"entries":2,"key_id":"fe812c12f3ab4ce6","public_key":"6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=","scan":{"findings":[{"code":"interop_warn","message":"contains < and &\t and é and \u2028","path":"a<b>&c.js","severity":"warn"}],"result":"warn"},"scanner":"vapour-zipscan/1","sha256":"5fae6671db920014f8c304cb8080939e95b2cb05ed0ae8be04f4335904165550","signed_at":"2026-01-02T03:04:05Z","size":334,"version":1}

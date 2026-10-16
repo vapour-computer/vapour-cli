@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "sha256": "5fae6671db920014f8c304cb8080939e95b2cb05ed0ae8be04f4335904165550",
+  "size": 334,
+  "entries": 2,
+  "scanner": "vapour-zipscan/1",
+  "scan": {
+    "result": "warn",
+    "findings": [
+      {
+        "severity": "warn",
+        "code": "interop_warn",
+        "path": "a\u003cb\u003e\u0026c.js",
+        "message": "contains \u003c and \u0026\t and é and \u2028"
+      }
+    ]
+  },
+  "signed_at": "2026-01-02T03:04:05Z",
+  "key_id": "fe812c12f3ab4ce6",
+  "public_key": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=",
+  "signature": "SrWcS7WN1V2/svBckRkD52bW/W48dkVkAw2lyo86fqsD52ykReoqDkqWiVsbKzl4OwCMeppAsVN0jIhqlRDEAQ=="
+}

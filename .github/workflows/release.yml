@@ -1,19 +1,163 @@
 name: release
 on:
   push:
+    branches: [main]
     tags: ["v*"]
-permissions: { contents: write }
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump override"
+        type: choice
+        required: false
+        default: patch
+        options: [patch, minor, major]
+permissions: { contents: read }
 jobs:
-  goreleaser:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    concurrency:
+      group: release
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
+      - id: version
+        env:
+          INPUT_BUMP: ${{ github.event.inputs.bump }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          release_exists() {
+            local tag="$1"
+            gh release view "$tag" >/dev/null 2>&1
+          }
+
+          if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            prev="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -Fxv "$tag" | head -n1 || true)"
+            run_release=true
+            if release_exists "$tag"; then
+              run_release=false
+            fi
+            {
+              echo "run_release=$run_release"
+              echo "create_tag=false"
+              echo "release_tag=$tag"
+              echo "previous_tag=$prev"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          head_tag="$(git tag --points-at HEAD --list 'v[0-9]*.[0-9]*.[0-9]*' | head -n1 || true)"
+          if [[ -n "$head_tag" ]]; then
+            run_release=true
+            if release_exists "$head_tag"; then
+              run_release=false
+            fi
+            {
+              echo "run_release=$run_release"
+              echo "create_tag=false"
+              echo "release_tag=$head_tag"
+              echo "previous_tag="
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
+          if [[ -z "$latest" ]]; then
+            latest="v0.1.0"
+            has_latest=false
+          else
+            has_latest=true
+          fi
+
+          bump="${INPUT_BUMP:-}"
+          if [[ -z "$bump" ]]; then
+            bump="patch"
+            range="HEAD"
+            if [[ "$has_latest" == true ]]; then
+              range="$latest..HEAD"
+            fi
+            msgs="$(git log --format=%s $range || true)"
+            if echo "$msgs" | grep -qi '\[major\]'; then
+              bump="major"
+            elif echo "$msgs" | grep -qi '\[minor\]'; then
+              bump="minor"
+            fi
+          fi
+
+          base="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$base"
+          case "$bump" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+            *)
+              echo "invalid bump: $bump" >&2
+              exit 1
+              ;;
+          esac
+
+          next_tag="v${major}.${minor}.${patch}"
+          {
+            echo "run_release=true"
+            echo "create_tag=true"
+            echo "release_tag=$next_tag"
+            echo "previous_tag=$latest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create annotated tag
+        if: steps.version.outputs.create_tag == 'true'
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.release_tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+      - name: Sync llm fallback
+        if: steps.version.outputs.run_release == 'true'
+        run: |
+          if [[ -f scripts/sync-llm.sh ]]; then
+            bash scripts/sync-llm.sh || echo 'llm sync skipped'
+          else
+            echo 'llm sync skipped'
+          fi
+
       - uses: goreleaser/goreleaser-action@v6
+        if: steps.version.outputs.run_release == 'true'
         with:
           version: "~> v2"
-          args: release --clean
+          # sync-llm.sh may refresh cmd/llm_fallback.txt without committing; skip validate so release can proceed.
+          args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
