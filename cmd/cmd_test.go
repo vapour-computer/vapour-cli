@@ -153,7 +153,7 @@ func TestLoginCreateStorePublishFlow(t *testing.T) {
 	}
 
 	// No build yet: publish must fail before touching the server.
-	if _, err := run(t, "publish", "--dir", game); err == nil {
+	if _, err := run(t, "publish", "--dir", game, "--version", "0.1.0", "--notes", "Initial test release"); err == nil {
 		t.Fatal("publish without a build should fail")
 	}
 	if err := os.MkdirAll(filepath.Join(game, "build/web"), 0o755); err != nil {
@@ -171,7 +171,7 @@ func TestLoginCreateStorePublishFlow(t *testing.T) {
 	pj = []byte(strings.Replace(string(pj), `"category": "casual"`, `"category": "arcade"`, 1))
 	os.WriteFile(pagePath, pj, 0o644)
 
-	if out, err := run(t, "publish", "--dir", game, "--dry-run"); err != nil || !strings.Contains(out, "Dry run") || !strings.Contains(out, "banner") {
+	if out, err := run(t, "publish", "--dir", game, "--dry-run", "--version", "0.1.0", "--notes", "Dry run check"); err != nil || !strings.Contains(out, "Dry run") || !strings.Contains(out, "banner") {
 		t.Fatalf("dry run: %v %q", err, out)
 	}
 	if len(api.versions) != 0 || api.storeMeta != nil {
@@ -204,12 +204,12 @@ func TestLoginCreateStorePublishFlow(t *testing.T) {
 	}
 
 	// The same version cannot be published twice; the message tells the developer what to do.
-	if _, err := run(t, "publish", "--dir", game, "--version", "0.2.0", "--skip-store"); err == nil || !strings.Contains(err.Error(), "Bump") {
+	if _, err := run(t, "publish", "--dir", game, "--version", "0.2.0", "--notes", "Duplicate", "--skip-store"); err == nil || !strings.Contains(err.Error(), "Pass a new --version") {
 		t.Errorf("repeat version: %v", err)
 	}
 	// --skip-store publishes a new version without touching the store page.
 	api.storeMeta = nil
-	if _, err := run(t, "publish", "--dir", game, "--version", "0.3.0", "--skip-store"); err != nil || api.storeMeta != nil {
+	if _, err := run(t, "publish", "--dir", game, "--version", "0.3.0", "--notes", "Skip store", "--skip-store"); err != nil || api.storeMeta != nil {
 		t.Errorf("skip-store: %v meta=%v", err, api.storeMeta)
 	}
 	// store push updates only the page.
@@ -238,7 +238,7 @@ func TestRejectsBadMediaBeforeUploading(t *testing.T) {
 	p := filepath.Join(game, "store/page.json")
 	b, _ := os.ReadFile(p)
 	os.WriteFile(p, []byte(strings.Replace(string(b), `"banner": ""`, `"banner": "evil.png"`, 1)), 0o644)
-	if _, err := run(t, "publish", "--dir", game); err == nil || !strings.Contains(err.Error(), "PNG, JPEG or WebP") {
+	if _, err := run(t, "publish", "--dir", game, "--version", "0.2.0", "--notes", "Bad media test"); err == nil || !strings.Contains(err.Error(), "PNG, JPEG or WebP") {
 		t.Errorf("svg disguised as png: %v", err)
 	}
 	if len(api.versions) != 0 || api.storeMeta != nil {
@@ -254,5 +254,74 @@ func TestErrorsPointToTheDocs(t *testing.T) {
 	out, _ := run(t, "--help")
 	if !strings.Contains(out, "https://vapour-dev-docs.pages.dev/") {
 		t.Errorf("help does not mention the docs:\n%s", out)
+	}
+}
+
+func TestPublishRequiresVersionAndNotes(t *testing.T) {
+	api := newFakeAPI(t)
+	defer api.srv.Close()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("VAPOUR_API", "")
+	t.Setenv("VAPOUR_TOKEN", "")
+	wd, _ := os.Getwd()
+	work := t.TempDir()
+	os.Chdir(work)
+	defer os.Chdir(wd)
+
+	if _, err := run(t, "login", "--api", api.srv.URL, "--token", "vpr_good"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, "create", "Flag Checks", "--engine", "godot"); err != nil {
+		t.Fatal(err)
+	}
+	game := filepath.Join(work, "flag-checks")
+	if err := os.MkdirAll(filepath.Join(game, "build/web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(game, "build/web/index.html"), []byte("<html></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := run(t, "publish", "--dir", game, "--skip-store", "--notes", "x"); err == nil || !strings.Contains(err.Error(), "--version is required") {
+		t.Fatalf("missing version: %v", err)
+	}
+	if _, err := run(t, "publish", "--dir", game, "--skip-store", "--version", "0.2.0"); err == nil || !strings.Contains(err.Error(), "release notes are required") {
+		t.Fatalf("missing notes: %v", err)
+	}
+	notesPath := filepath.Join(game, "notes.md")
+	if err := os.WriteFile(notesPath, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, "publish", "--dir", game, "--skip-store", "--version", "0.2.0", "--notes", "x", "--notes-file", notesPath); err == nil || !strings.Contains(err.Error(), "exactly one of --notes or --notes-file") {
+		t.Fatalf("both notes flags: %v", err)
+	}
+	if _, err := run(t, "publish", "--dir", game, "--skip-store", "--version", "0.2.0", "--notes-file", filepath.Join(game, "missing-notes.md")); err == nil || !strings.Contains(err.Error(), "release notes file") {
+		t.Fatalf("missing notes file: %v", err)
+	}
+	if err := os.WriteFile(notesPath, []byte("\n \t\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(t, "publish", "--dir", game, "--skip-store", "--version", "0.2.0", "--notes-file", notesPath); err == nil || !strings.Contains(err.Error(), "is empty") {
+		t.Fatalf("empty notes file: %v", err)
+	}
+	if _, err := run(t, "publish", "--dir", game, "--dry-run", "--skip-store", "--notes", "x"); err == nil || !strings.Contains(err.Error(), "--version is required") {
+		t.Fatalf("dry-run without version: %v", err)
+	}
+	if _, err := run(t, "publish", "--dir", game, "--dry-run", "--skip-store", "--version", "0.2.0"); err == nil || !strings.Contains(err.Error(), "release notes are required") {
+		t.Fatalf("dry-run without notes: %v", err)
+	}
+
+	mfPath := filepath.Join(game, "vapour.toml")
+	mf, err := os.ReadFile(mfPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mf = []byte(strings.Replace(string(mf), "[store]\n", "[store]\nnotes = 'legacy notes'\n", 1))
+	if err := os.WriteFile(mfPath, mf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, "publish", "--dir", game, "--dry-run", "--skip-store", "--version", "0.2.0", "--notes", "x")
+	if err != nil || !strings.Contains(out, "store.notes in vapour.toml is ignored by publish") {
+		t.Fatalf("store.notes warning: err=%v out=%q", err, out)
 	}
 }
