@@ -2,6 +2,8 @@
 
 Purpose: print the curated assistant guide to stdout so developers can pipe it into coding assistants without waiting for a CLI release.
 
+The root help labels `llm` as a guide for LLMs and explicitly says it writes to stdout. `vapour llm --help` suggests reading the output directly or saving it under `.claude/` or `.opencode/` for an assistant to read. Files saved in those directories are not automatically loaded as instructions; point the assistant at the file. For example, `mkdir -p .opencode && vapour llm > .opencode/vapour-guide.md` saves the guide without replacing an existing `AGENTS.md`.
+
 ## Source and overrides
 
 - Default URL: `https://vapour-dev-docs.pages.dev/llm.txt`
