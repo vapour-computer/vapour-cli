@@ -112,6 +112,23 @@ func run(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
+func TestRootHelpShowsArtWithoutPollutingCommandHelp(t *testing.T) {
+	rootHelp, err := run(t, "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rootHelp, "\\ V /") || !strings.Contains(rootHelp, "Docs: "+DocsURL) {
+		t.Fatalf("root help missing art or docs: %q", rootHelp)
+	}
+	commandHelp, err := run(t, "scan", "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(commandHelp, "\\ V /") {
+		t.Fatalf("command help contains root art: %q", commandHelp)
+	}
+}
+
 func pngFile(t *testing.T, path string, w, h int) {
 	t.Helper()
 	var b bytes.Buffer

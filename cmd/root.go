@@ -29,7 +29,16 @@ func newRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "vapour",
 		Short: "Create and publish web games on Vapour",
-		Long:  "Create and publish web games on Vapour.\n\nDocs: " + DocsURL,
+		Long: `__     __
+\ \   / /_ _ _ __   ___  _   _ _ __
+ \ \ / / _' | '_ \ / _ \| | | | '__|
+  \ V / (_| | |_) | (_) | |_| | |
+   \_/ \__,_| .__/ \___/ \__,_|_|
+            |_|
+
+Create and publish web games on Vapour.
+
+Docs: ` + DocsURL,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			maybeCheckForUpdate(cmd)
 		},

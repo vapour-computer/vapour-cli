@@ -1,10 +1,10 @@
 # Vapour developer guide for LLMs
-Version: 2026-10-16
+Version: 2026-10-17
 Source: https://vapour-dev-docs.pages.dev/llm.txt
 
 Status terms in this file:
-- Released: on vapour-cli main.
-- Preview: merged in source but not guaranteed in a published release yet.
+- Source preview: implemented on vapour-cli main; check the installed binary's help for release availability.
+- Planned: not available in the current CLI or deployed service.
 
 1) What Vapour is and the normal flow
 
@@ -21,6 +21,8 @@ Rules that often matter:
 - `vapour publish` requires `--version` and exactly one of `--notes` or `--notes-file`, including dry runs.
 - Each game version can be published once; publishing the same version again returns a version-exists error.
 - `vapour publish --dry-run` validates and packs locally, without API auth/upload.
+- ZIP publishing scans and signs the exact packed build before upload, including dry runs. A failing scan stops before a version is used.
+- Upload is not the same as going live: the server verifies the ZIP, then a Vapour admin reviews the version.
 - Store push and publish can register a project and write `project.id` into `vapour.toml` on first server registration.
 
 Getting this file:
@@ -28,6 +30,7 @@ Getting this file:
 - Options: `--refresh`, `--offline`, `--url <URL>`
 - Env override: `VAPOUR_LLM_URL`
 - Direct URL: `https://vapour-dev-docs.pages.dev/llm.txt`
+- Guided tutorial for every top-level CLI command: `https://vapour-dev-docs.pages.dev/tutorials/cli.html`
 
 2) `vapour.toml` reference (fields assistants should use)
 
@@ -182,6 +185,13 @@ Current limits (source values):
 - Tags: max 5, each 1–24 characters
 
 Archive safety checks include rejecting path traversal/unsafe paths. Directory packing also rejects common native binaries and symlinks. Prebuilt zips still get server validation.
+
+ZIP scanning and verification (source-preview CLI):
+- `vapour scan [zip-or-folder]` checks zip bombs, unsafe paths, symlinks, native executables, known in-browser miners and the EICAR test string without extracting or running content. With no argument it uses `build.dir`. `--dir` chooses the game folder; `--json` prints findings. This heuristic is not antivirus.
+- Default ZIP `vapour publish` scans first and refuses error findings, then signs an Ed25519 attestation for the ZIP's SHA-256 and scan result. Keep the private key in the user's Vapour config directory private. The public attestation is saved at `.vapour/build.zip.attestation.json` inside the game folder. Preserve the exact ZIP if you want to verify its bytes later; folder publishing uses a temporary ZIP.
+- `vapour verify <build.zip>` checks the signature and ZIP hash, using `<build.zip>.attestation.json` if present or `.vapour/build.zip.attestation.json` otherwise. `--attestation <file>` selects another attestation.
+- `vapour verify --remote --version <version>` checks the signed attestation and the server's verification record; it needs a project ID and login. The ZIP is optional in this mode: without it, no local ZIP bytes are checked. `--dir` selects the project; `--json` emits a result object. The server must mark the version `verified` with the same SHA-256.
+- `--experimental-chunks` is a separate preview path: it scans but does not send a signed ZIP attestation; it requires a compatible server.
 
 Compression note:
 - At publish, eligible assets are stored Brotli-compressed when both conditions hold:
