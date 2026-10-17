@@ -13,9 +13,9 @@ import (
 )
 
 // DefaultAPI is used when neither a flag, VAPOUR_API nor saved credentials set one.
-const DefaultAPI = "https://api.vapour.ink"
+const DefaultAPI = "https://vapour-api-637456171586.asia-south1.run.app"
 
-const DefaultAPIHost = "api.vapour.ink"
+const DefaultAPIHost = "vapour-api-637456171586.asia-south1.run.app"
 
 type Credentials struct {
 	API   string `toml:"api,omitempty"`
