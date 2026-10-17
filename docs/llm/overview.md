@@ -25,7 +25,7 @@ For assistant context in-terminal: `vapour llm` (fetches docs `llm.txt`, caches 
 | `pkg/delivery` | experimental chunked upload |
 
 ## Resolution rules (`cmd/root.go`, `internal/config`)
-- API base: `--api` flag > `VAPOUR_API` > `api` in saved credentials > `https://api.vapour.ink`.
+- API base: `--api` flag > `VAPOUR_API` > `api` in saved credentials > `https://vapour-api-637456171586.asia-south1.run.app`.
 - API safety: HTTPS is required. Plain HTTP is allowed only for localhost with `--allow-insecure-http`
   (or `VAPOUR_ALLOW_INSECURE_HTTP=1`).
 - Token safety: non-default API hosts are blocked unless `--allow-custom-api`

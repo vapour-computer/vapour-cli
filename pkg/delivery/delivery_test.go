@@ -66,7 +66,7 @@ func TestRejectSymlink(t *testing.T) {
 
 func TestUploadURLRejectsRemoteToLoopback(t *testing.T) {
 	for _, target := range []string{"http://127.0.0.1:8080/upload", "https://localhost/upload"} {
-		if err := validateUploadURL("https://api.vapour.ink", target); err == nil {
+		if err := validateUploadURL("https://vapour-api-637456171586.asia-south1.run.app", target); err == nil {
 			t.Fatalf("remote API may not send chunks to %s", target)
 		}
 	}
