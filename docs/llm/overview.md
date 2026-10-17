@@ -25,7 +25,7 @@ For assistant context in-terminal: `vapour llm` (fetches docs `llm.txt`, caches 
 | `pkg/delivery` | experimental chunked upload |
 
 ## Resolution rules (`cmd/root.go`, `internal/config`)
-- API base: `--api` flag > `VAPOUR_API` > `api` in saved credentials > `https://api.vapour.ink`.
+- API base: `--api` flag > `VAPOUR_API` > `api` in saved credentials > `https://vapour-api-637456171586.asia-south1.run.app`.
 - Token: `VAPOUR_TOKEN` (for CI) > saved credentials. Commands needing auth fail with "not logged in".
 - Credentials file: `$XDG_CONFIG_HOME/vapour/credentials` or `~/.config/vapour/credentials`.
 
