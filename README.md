@@ -30,6 +30,14 @@ vapour perf                          # optional: engine-specific web performance
 vapour publish --version 0.1.0 --notes "First release"
 ```
 
+### Claude Code skill
+
+```sh
+vapour skill install            # clones vapour-computer/vapour-skill into ~/.claude/skills/vapour
+vapour skill install --project  # or into ./.claude/skills/vapour
+vapour skill update             # git pull --ff-only
+```
+
 ### Update
 
 `vapour-cli update` installs the latest release over the running binary (checksum verified). `--check` only reports, `--version v0.2.0` picks a release. Not available on Windows.

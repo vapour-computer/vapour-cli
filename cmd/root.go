@@ -55,7 +55,7 @@ func newRoot() *cobra.Command {
 	root.PersistentFlags().StringVar(&apiFlag, "api", "", "API base URL (default: saved login, or "+config.DefaultAPI+")")
 	root.PersistentFlags().BoolVar(&allowCustomAPI, "allow-custom-api", false, "allow non-default API hosts (unsafe: tokens are sent to that host)")
 	root.PersistentFlags().BoolVar(&allowInsecureHTTP, "allow-insecure-http", false, "allow plain HTTP only for localhost")
-	root.AddCommand(newLogin(), newLogout(), newWhoami(), newCreate(), newTemplate(), newPublish(), newStore(), newBuild(), newTest(), newPerf(), newLLM(), newController(), newUpdate(), newScan(), newVerify())
+	root.AddCommand(newLogin(), newLogout(), newWhoami(), newCreate(), newTemplate(), newPublish(), newStore(), newBuild(), newTest(), newPerf(), newLLM(), newController(), newUpdate(), newScan(), newVerify(), newSkill())
 	return root
 }
 
