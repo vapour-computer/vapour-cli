@@ -23,6 +23,13 @@ type Manifest struct {
 	Store   Store   `toml:"store"`
 
 	Controller Controller `toml:"controller"`
+
+	Guardrails Guardrails `toml:"guardrails"`
+}
+
+// Guardrails lets a developer acknowledge a blocking `vapour` guardrail finding by code.
+type Guardrails struct {
+	Allow []string `toml:"allow,omitempty"`
 }
 
 type Runtime struct {

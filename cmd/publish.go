@@ -50,6 +50,9 @@ Release notes are required with --notes or --notes-file.`,
 				fmt.Fprintln(out, "Warning: store.notes in vapour.toml is ignored by publish; use --notes or --notes-file.")
 			}
 			emitPerfHints(out, dir, m, noPerfHints)
+			if err := emitGuardrails(out, dir, m, chunked); err != nil {
+				return err
+			}
 
 			var bundle *storepage.Bundle
 			if !skipStore {
