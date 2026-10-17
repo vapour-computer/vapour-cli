@@ -34,6 +34,7 @@ Releases: push a `v*` tag; `.github/workflows/release.yml` runs goreleaser. User
 | [docs/llm/build.md](docs/llm/build.md) | `build` (Godot, Unity, Bevy exports) |
 | [docs/llm/test.md](docs/llm/test.md) | `test`: local server, FPS overlay, profiler |
 | [docs/llm/store.md](docs/llm/store.md) | `store check/push`, `store/page.json`, media rules |
+| [docs/llm/skill.md](docs/llm/skill.md) | `skill install/update` (Claude Code skill) |
 | [docs/llm/publish.md](docs/llm/publish.md) | `publish`, zip checks, experimental chunks |
 | [docs/llm/llm-txt.md](docs/llm/llm-txt.md) | `vapour llm` fetch/cache/fallback design |
 | [docs/llm/release.md](docs/llm/release.md) | goreleaser, `install.sh`, CI, branch rules |
