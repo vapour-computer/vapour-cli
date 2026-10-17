@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/vapour-computer/vapour-cli/internal/guardrails"
 	"github.com/vapour-computer/vapour-cli/internal/perfcheck"
 	"github.com/vapour-computer/vapour-cli/internal/project"
 )
@@ -60,6 +61,22 @@ func emitPerfHints(w io.Writer, dir string, m *project.Manifest, noPerfHints boo
 	for _, line := range perfcheck.FormatWarnings(perfcheck.Check(dir, m, "")) {
 		fmt.Fprintf(w, "Warning: perf %s\n", line)
 	}
+}
+
+// emitGuardrails prints guardrail findings and fails when a blocking one is not allowed in vapour.toml.
+func emitGuardrails(w io.Writer, dir string, m *project.Manifest, chunked bool) error {
+	findings := guardrails.Check(dir, m, guardrails.Options{Chunked: chunked})
+	for _, line := range guardrails.Format(findings) {
+		fmt.Fprintf(w, "Guardrail: %s\n", line)
+	}
+	if blocked := guardrails.Blocking(findings, m.Guardrails.Allow); len(blocked) > 0 {
+		codes := make([]string, len(blocked))
+		for i, f := range blocked {
+			codes[i] = f.Code
+		}
+		return fmt.Errorf("blocked by guardrails: %s (fix them, or acknowledge with [guardrails] allow in %s)", strings.Join(codes, ", "), project.File)
+	}
+	return nil
 }
 
 func isPerfEngine(engine string) bool {

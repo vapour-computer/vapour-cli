@@ -56,6 +56,9 @@ Use --player to preview in a production-like iframe shell (sandbox/allow). Add -
 				return err
 			}
 			emitPerfHints(out, dir, m, noPerfHints)
+			if err := emitGuardrails(out, dir, m, false); err != nil {
+				return err
+			}
 			buildPath, err := project.ResolvePathInside(dir, m.Build.Dir, "build.dir")
 			if err != nil {
 				return err

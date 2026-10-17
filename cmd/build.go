@@ -14,6 +14,9 @@ func newBuild() *cobra.Command {
 		if e != nil {
 			return e
 		}
+		if err := emitGuardrails(c.OutOrStdout(), dir, m, false); err != nil {
+			return err
+		}
 		if err := enginebuild.Build(c.Context(), dir, m, c.OutOrStdout()); err != nil {
 			return err
 		}
